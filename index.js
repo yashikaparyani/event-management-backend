@@ -54,12 +54,13 @@ async function initializeServer() {
   try {
     // Connect to MongoDB
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/event_management';
-    console.log('Connecting to MongoDB:', mongoUri);
+    console.log('Connecting to MongoDB...');
     
-    await mongoose.connect(mongoUri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
-    });
+    if (!process.env.MONGODB_URI) {
+      console.warn('Warning: MONGODB_URI environment variable not set. Using local database.');
+    }
+    
+    await mongoose.connect(mongoUri);
     console.log('MongoDB connected successfully');
 
     // Initialize roles and permissions
@@ -75,7 +76,7 @@ async function initializeServer() {
     // Start the server
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+      console.log(`Server running on port ${PORT}`);
     });
   } catch (error) {
     console.error('Server initialization error:', {
