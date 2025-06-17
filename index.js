@@ -16,7 +16,7 @@ app.use(cors({
     'http://localhost:3000',
     'http://localhost:5000',
     'http://127.0.0.1:5500',
-    'https://your-netlify-app.netlify.app', // Replace with your actual Netlify URL
+    'https://evnify.netlify.app', // Your deployed Netlify domain
     'https://your-custom-domain.com' // Replace with your custom domain if any
   ],
   credentials: true
