@@ -10,8 +10,17 @@ const createInitialAdmin = require('./config/createAdmin');
 
 const app = express();
 
-// Enable CORS for all routes
-app.use(cors());
+// Enable CORS for all routes with specific origins
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://127.0.0.1:5500',
+    'https://your-netlify-app.netlify.app', // Replace with your actual Netlify URL
+    'https://your-custom-domain.com' // Replace with your custom domain if any
+  ],
+  credentials: true
+}));
 
 // Middleware
 app.use(bodyParser.json());
