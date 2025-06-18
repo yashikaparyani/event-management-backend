@@ -37,9 +37,9 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
-    // Check if user is approved (only for coordinator and volunteer)
-    if (['coordinator', 'volunteer'].includes(user.role.name) && user.status !== 'approved') {
-      console.log('User not approved:', {
+    // Check if user is approved (only for coordinator role)
+    if (user.role.name === 'coordinator' && user.status !== 'approved') {
+      console.log('Coordinator not approved:', {
         email,
         role: user.role.name,
         status: user.status
@@ -113,13 +113,13 @@ router.post('/register', async (req, res) => {
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user object
+    // Create user object - Auto-approve audience, participant, and volunteer
     const newUser = new User({
       name,
       email,
       password: hashedPassword,
       role: roleDoc._id,
-      status: role === 'audience' ? 'approved' : 'pending' // Auto-approve audience
+      status: ['audience', 'participant', 'volunteer'].includes(role) ? 'approved' : 'pending' // Auto-approve audience, participant, volunteer
     });
 
     // Add role-specific data
@@ -175,8 +175,8 @@ router.put('/approve-user/:userId', authMiddleware, checkPermission('approve'), 
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Only allow approval/rejection for coordinator and volunteer roles
-    if (!['coordinator', 'volunteer'].includes(user.role.name)) {
+    // Only allow approval/rejection for coordinator role
+    if (user.role.name !== 'coordinator') {
       return res.status(400).json({ message: 'This user type does not require approval' });
     }
 
