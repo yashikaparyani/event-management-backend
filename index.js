@@ -6,7 +6,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const initializeRolesAndPermissions = require('./config/initializeRolesAndPermissions');
-const createInitialAdmin = require('./config/createAdmin');
 
 const app = express();
 
@@ -69,11 +68,6 @@ async function initializeServer() {
     console.log('Initializing roles and permissions...');
     await initializeRolesAndPermissions();
     console.log('Roles and permissions initialized successfully');
-
-    // Create initial admin user
-    console.log('Creating initial admin user...');
-    await createInitialAdmin();
-    console.log('Initial admin user created successfully');
 
     // Start the server
     const PORT = process.env.PORT || 5000;
