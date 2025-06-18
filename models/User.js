@@ -57,7 +57,13 @@ const userSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
-  }
+  },
+
+  phone: {
+    type: String,
+    required: true,
+    unique: true,
+  },
 });
 
 // Update the updatedAt timestamp before saving

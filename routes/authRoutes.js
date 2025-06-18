@@ -91,6 +91,7 @@ router.post('/register', async (req, res) => {
       email,
       password,
       role,
+      phone,
       eventInterest,
       coordinationArea,
       experience,
@@ -98,10 +99,16 @@ router.post('/register', async (req, res) => {
       skills
     } = req.body;
 
-    // Check if user already exists
+    // Check if user already exists (by email)
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Check if phone already exists
+    const existingPhone = await User.findOne({ phone });
+    if (existingPhone) {
+      return res.status(400).json({ message: 'Phone number already registered' });
     }
 
     // Find role by name
@@ -118,6 +125,7 @@ router.post('/register', async (req, res) => {
       name,
       email,
       password: hashedPassword,
+      phone,
       role: roleDoc._id,
       status: ['audience', 'participant', 'volunteer'].includes(role) ? 'approved' : 'pending' // Auto-approve audience, participant, volunteer
     });
