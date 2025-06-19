@@ -24,8 +24,8 @@ exports.createEvent = async (req, res) => {
 
         await newEvent.save();
 
-        // Generate registration URL for QR code
-        const registrationUrl = `/client/register.html?eventId=${newEvent._id}`;
+        // Generate registration URL for QR code (absolute URL to deployed frontend)
+        const registrationUrl = `https://evnify.netlify.app/register?eventId=${newEvent._id}`;
         // Generate QR code as base64 PNG
         newEvent.qrCode = await QRCode.toDataURL(registrationUrl, { type: 'image/png' });
         await newEvent.save();

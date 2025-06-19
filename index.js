@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const initializeRolesAndPermissions = require('./config/initializeRolesAndPermissions');
+const path = require('path');
 
 const app = express();
 
@@ -46,6 +47,9 @@ app.use('/api', require('./routes/roleRoutes'));
 app.use('/api', require('./routes/userRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/events', require('./routes/eventRoutes'));
+
+// Serve static files from the client directory
+app.use('/client', express.static(path.join(__dirname, '../client')));
 
 // Root route
 app.get('/', (req, res) => {
