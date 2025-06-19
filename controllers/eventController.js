@@ -1,4 +1,5 @@
 const Event = require('../models/Event');
+const QRCode = require('qrcode');
 
 // Create a new event
 exports.createEvent = async (req, res) => {
@@ -21,6 +22,12 @@ exports.createEvent = async (req, res) => {
             createdBy
         });
 
+        await newEvent.save();
+
+        // Generate registration URL for QR code
+        const registrationUrl = `https://event-management-backend-z0ty.onrender.com/api/events/${newEvent._id}/register`;
+        // Generate QR code as base64 PNG
+        newEvent.qrCode = await QRCode.toDataURL(registrationUrl, { type: 'image/png' });
         await newEvent.save();
 
         res.status(201).json({ message: 'Event created successfully!', event: newEvent });

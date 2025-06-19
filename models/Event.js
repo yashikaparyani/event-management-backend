@@ -56,7 +56,11 @@ const eventSchema = new mongoose.Schema({
     registeredUsers: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
-    }]
+    }],
+    qrCode: {
+        type: String,
+        trim: true
+    }
 });
 
 // Update the updatedAt timestamp before saving
