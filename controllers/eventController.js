@@ -25,7 +25,7 @@ exports.createEvent = async (req, res) => {
         await newEvent.save();
 
         // Generate registration URL for QR code
-        const registrationUrl = `https://event-management-backend-z0ty.onrender.com/api/events/${newEvent._id}/register`;
+        const registrationUrl = `/client/register.html?eventId=${newEvent._id}`;
         // Generate QR code as base64 PNG
         newEvent.qrCode = await QRCode.toDataURL(registrationUrl, { type: 'image/png' });
         await newEvent.save();
@@ -114,6 +114,34 @@ exports.getRegisteredEvents = async (req, res) => {
         res.status(200).json(events);
     } catch (error) {
         console.error('Error fetching registered events:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// Register a user for an event (from QR registration)
+exports.registerForEvent = async (req, res) => {
+    try {
+        const eventId = req.params.id;
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ message: 'Email is required to register for event.' });
+        }
+        const user = await require('../models/User').findOne({ email });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+        const event = await Event.findById(eventId);
+        if (!event) {
+            return res.status(404).json({ message: 'Event not found.' });
+        }
+        // Only add if not already registered
+        if (!event.registeredUsers.includes(user._id)) {
+            event.registeredUsers.push(user._id);
+            await event.save();
+        }
+        return res.status(200).json({ message: 'User registered for event successfully.' });
+    } catch (error) {
+        console.error('Error registering user for event:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };

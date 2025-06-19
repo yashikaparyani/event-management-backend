@@ -25,6 +25,9 @@ router.put('/:id', authMiddleware, checkPermission('edit_event'), eventControlle
 // Delete an event by ID (requires 'delete' permission)
 router.delete('/:id', authMiddleware, checkPermission('delete'), eventController.deleteEvent);
 
+// Register for an event (participant)
+router.post('/:id/register', eventController.registerForEvent);
+
 // Future routes for events (GET, PUT, DELETE) will be added here
 
 module.exports = router; 
