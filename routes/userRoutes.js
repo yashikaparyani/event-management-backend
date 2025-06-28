@@ -19,10 +19,10 @@ router.get('/users', authMiddleware, checkPermission('admin_panel'), async (req,
 // POST /api/users/:id/approve - Approve coordinator (admin only)
 router.post('/users/:id/approve', authMiddleware, checkPermission('approve'), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    const user = await User.findById(req.params.id).populate('role');
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    if (user.role !== 'coordinator') {
+    if (user.role.name !== 'coordinator') {
       return res.status(400).json({ message: 'Only coordinators can be approved' });
     }
 
@@ -37,10 +37,10 @@ router.post('/users/:id/approve', authMiddleware, checkPermission('approve'), as
 // POST /api/users/:id/reject - Reject coordinator (admin only)
 router.post('/users/:id/reject', authMiddleware, checkPermission('approve'), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    const user = await User.findById(req.params.id).populate('role');
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    if (user.role !== 'coordinator') {
+    if (user.role.name !== 'coordinator') {
       return res.status(400).json({ message: 'Only coordinators can be rejected' });
     }
 
