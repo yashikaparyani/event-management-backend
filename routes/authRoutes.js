@@ -84,7 +84,7 @@ router.post('/login', async (req, res) => {
 });
 
 // Route: POST /register
-router.post('/register', authMiddleware.optional, async (req, res) => {
+router.post('/register', async (req, res) => {
   try {
     const {
       name,
