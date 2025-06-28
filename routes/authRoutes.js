@@ -84,7 +84,7 @@ router.post('/login', async (req, res) => {
 });
 
 // Route: POST /register
-router.post('/register', async (req, res) => {
+router.post('/register', authMiddleware.optional, async (req, res) => {
   try {
     const {
       name,
@@ -96,7 +96,8 @@ router.post('/register', async (req, res) => {
       coordinationArea,
       experience,
       availability,
-      skills
+      skills,
+      eventId
     } = req.body;
 
     // Check if user already exists (by email)
@@ -120,14 +121,19 @@ router.post('/register', async (req, res) => {
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user object - Auto-approve audience, participant, and volunteer
+    // Determine if the request is from an admin
+    let status = ['audience', 'participant', 'volunteer'].includes(role) ? 'approved' : 'pending';
+    if (['coordinator', 'volunteer'].includes(role) && req.user && req.user.role && req.user.role.name === 'admin') {
+      status = 'approved';
+    }
     const newUser = new User({
       name,
       email,
       password: hashedPassword,
       phone,
       role: roleDoc._id,
-      status: ['audience', 'participant', 'volunteer'].includes(role) ? 'approved' : 'pending' // Auto-approve audience, participant, volunteer
+      status,
+      eventId: eventId || undefined
     });
 
     // Add role-specific data
@@ -135,7 +141,6 @@ router.post('/register', async (req, res) => {
       newUser.eventInterest = eventInterest;
     } else if (role === 'coordinator') {
       newUser.coordinationArea = coordinationArea;
-      newUser.experience = experience;
     } else if (role === 'volunteer') {
       newUser.availability = availability;
       newUser.skills = skills;

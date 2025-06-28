@@ -28,6 +28,12 @@ router.delete('/:id', authMiddleware, checkPermission('delete'), eventController
 // Register for an event (participant)
 router.post('/:id/register', eventController.registerForEvent);
 
+// Toggle applicationsOpen for coordinator/volunteer (admin only)
+router.put('/:eventId/applications-open', authMiddleware, checkPermission('edit_event'), eventController.toggleApplicationsOpen);
+
+// Get events with applicationsOpen for coordinator/volunteer (public)
+router.get('/applications-open', eventController.getEventsWithOpenApplications);
+
 // Future routes for events (GET, PUT, DELETE) will be added here
 
 module.exports = router; 

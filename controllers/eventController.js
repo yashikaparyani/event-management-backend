@@ -145,3 +145,39 @@ exports.registerForEvent = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
+// Toggle applicationsOpen for coordinator/volunteer (admin only)
+exports.toggleApplicationsOpen = async (req, res) => {
+    try {
+        const { eventId } = req.params;
+        const { role, open } = req.body; // role: 'coordinator' or 'volunteer', open: true/false
+        if (!['coordinator', 'volunteer'].includes(role)) {
+            return res.status(400).json({ message: 'Invalid role for applicationsOpen' });
+        }
+        const event = await Event.findById(eventId);
+        if (!event) {
+            return res.status(404).json({ message: 'Event not found' });
+        }
+        event.applicationsOpen[role] = open;
+        await event.save();
+        res.status(200).json({ message: `Applications for ${role} set to ${open}`, event });
+    } catch (error) {
+        console.error('Error toggling applicationsOpen:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// Get events with applicationsOpen for coordinator/volunteer (public)
+exports.getEventsWithOpenApplications = async (req, res) => {
+    try {
+        const { role } = req.query; // role: 'coordinator' or 'volunteer'
+        if (!['coordinator', 'volunteer'].includes(role)) {
+            return res.status(400).json({ message: 'Invalid role for applicationsOpen' });
+        }
+        const events = await Event.find({ [`applicationsOpen.${role}`]: true });
+        res.status(200).json(events);
+    } catch (error) {
+        console.error('Error fetching events with open applications:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};

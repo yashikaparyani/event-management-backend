@@ -64,6 +64,12 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+
+  eventId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Event',
+    required: false
+  },
 });
 
 // Update the updatedAt timestamp before saving

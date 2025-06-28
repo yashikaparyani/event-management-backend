@@ -60,6 +60,10 @@ const eventSchema = new mongoose.Schema({
     qrCode: {
         type: String,
         trim: true
+    },
+    applicationsOpen: {
+        coordinator: { type: Boolean, default: false },
+        volunteer: { type: Boolean, default: false }
     }
 });
 
