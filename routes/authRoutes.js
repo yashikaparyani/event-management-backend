@@ -15,58 +15,30 @@ router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    console.log('Login attempt for:', email);
-
-    // Find user by email and populate role
     const user = await User.findOne({ email }).populate('role');
     if (!user) {
-      console.log('User not found:', email);
       return res.status(400).json({ message: 'Invalid email or password' });
     }
-
-    console.log('User found:', {
-      id: user._id,
-      role: user.role ? user.role.name : 'no role',
-      status: user.status
-    });
-
-    // Compare password with bcrypt
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      console.log('Password mismatch for:', email);
       return res.status(400).json({ message: 'Invalid email or password' });
     }
-
-    // Check if user is approved (only for coordinator role)
     if (user.role.name === 'coordinator' && user.status !== 'approved') {
-      console.log('Coordinator not approved:', {
-        email,
-        role: user.role.name,
-        status: user.status
-      });
       return res.status(403).json({ 
         message: 'Your account is pending approval',
         status: 'pending',
         role: user.role.name
       });
     }
-
-    // Create JWT payload
     const payload = {
       id: user._id,
       role: user.role.name,
       name: user.name,
       email: user.email,
     };
-
-    // Sign token with secret and expiration
     const token = jwt.sign(payload, process.env.JWT_SECRET || 'default_secret_key', {
       expiresIn: '1h',
     });
-
-    console.log('Login successful for:', email);
-
-    // Send token & user info as response
     res.json({ 
       token, 
       user: {
@@ -94,62 +66,56 @@ router.post('/register', async (req, res) => {
       phone,
       eventInterest,
       coordinationArea,
-      experience,
       availability,
-      skills
+      skills,
+      createdByAdmin
     } = req.body;
-
-    // Check if user already exists (by email)
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists' });
     }
-
-    // Check if phone already exists
-    const existingPhone = await User.findOne({ phone });
-    if (existingPhone) {
-      return res.status(400).json({ message: 'Phone number already registered' });
+    if (!createdByAdmin) {
+      if (!phone) {
+        return res.status(400).json({ message: 'Phone number is required' });
+      }
+      const existingPhone = await User.findOne({ phone });
+      if (existingPhone) {
+        return res.status(400).json({ message: 'Phone number already registered' });
+      }
     }
-
-    // Find role by name
     const roleDoc = await Role.findOne({ name: role });
     if (!roleDoc) {
       return res.status(400).json({ message: 'Invalid role' });
     }
-
-    // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create user object - Auto-approve audience, participant, and volunteer
+    let status = 'approved';
+    // if (['coordinator', 'volunteer'].includes(role)) {
+    //   status = createdByAdmin ? 'approved' : 'pending';
+    // }
     const newUser = new User({
       name,
       email,
       password: hashedPassword,
-      phone,
       role: roleDoc._id,
-      status: ['audience', 'participant', 'volunteer'].includes(role) ? 'approved' : 'pending' // Auto-approve audience, participant, volunteer
+      status
     });
-
-    // Add role-specific data
+    if (phone && phone.trim() !== '') {
+      newUser.phone = phone;
+    }
     if (role === 'participant') {
       newUser.eventInterest = eventInterest;
     } else if (role === 'coordinator') {
       newUser.coordinationArea = coordinationArea;
-      newUser.experience = experience;
     } else if (role === 'volunteer') {
       newUser.availability = availability;
       newUser.skills = skills;
     }
-
     await newUser.save();
-
     res.status(201).json({ 
       message: 'User registered successfully',
       status: newUser.status
     });
-
   } catch (error) {
-    console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -157,7 +123,6 @@ router.post('/register', async (req, res) => {
 // Route: GET /pending-users
 router.get('/pending-users', authMiddleware, checkPermission('approve'), async (req, res) => {
   try {
-    // Filter pending users to only include coordinators and volunteers
     const pendingUsers = await User.find({ status: 'pending' })
       .populate('role')
       .where('role.name').in(['coordinator', 'volunteer'])
@@ -172,28 +137,21 @@ router.get('/pending-users', authMiddleware, checkPermission('approve'), async (
 router.put('/approve-user/:userId', authMiddleware, checkPermission('approve'), async (req, res) => {
   try {
     const { userId } = req.params;
-    const { status } = req.body; // 'approved' or 'rejected'
-
+    const { status } = req.body;
     if (!['approved', 'rejected'].includes(status)) {
       return res.status(400).json({ message: 'Invalid status value' });
     }
-
     const user = await User.findById(userId).populate('role');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-
-    // Only allow approval/rejection for coordinator role
     if (user.role.name !== 'coordinator') {
       return res.status(400).json({ message: 'This user type does not require approval' });
     }
-
     user.status = status;
     await user.save();
-
     res.json({ message: `User ${status} successfully`, user });
   } catch (error) {
-    console.error('Error updating user status:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

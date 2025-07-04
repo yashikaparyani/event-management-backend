@@ -25,12 +25,11 @@ const userSchema = new mongoose.Schema({
     required: true
   },
 
-  // Optional fields (appear based on role)
+  // Role-specific fields
   eventInterest: String,           // For participant
-  coordinationArea: String,       // For coordinator
-  experience: String,             // For coordinator
-  availability: String,           // For volunteer
-  skills: String,                 // For volunteer
+  coordinationArea: String,        // For coordinator
+  availability: String,            // For volunteer
+  skills: String,                  // For volunteer
 
   status: {
     type: String,
@@ -61,8 +60,7 @@ const userSchema = new mongoose.Schema({
 
   phone: {
     type: String,
-    required: true,
-    unique: true,
+    required: false
   },
 });
 

@@ -54,12 +54,8 @@ exports.updateRole = async (req, res) => {
   try {
     const { name, description, permissions, isDefault } = req.body;
     
-    console.log(`Update role request for ID: ${req.params.id}`);
-    console.log('Received permissions:', permissions);
-
     const role = await Role.findById(req.params.id);
     if (!role) {
-      console.log(`Role with ID ${req.params.id} not found.`);
       return res.status(404).json({ message: 'Role not found' });
     }
 
@@ -78,12 +74,9 @@ exports.updateRole = async (req, res) => {
     if (isDefault !== undefined) role.isDefault = isDefault;
 
     await role.save();
-    console.log(`Role ${role.name} updated successfully.`);
-    // Re-populate permissions to send back the full updated role object
     await role.populate('permissions');
     res.json(role);
   } catch (error) {
-    console.error('Error updating role:', error);
     res.status(500).json({ message: 'Error updating role', error: error.message });
   }
 };

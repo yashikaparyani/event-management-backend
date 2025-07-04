@@ -5,10 +5,7 @@ const QRCode = require('qrcode');
 exports.createEvent = async (req, res) => {
     try {
         const { title, description, date, time, location, capacity, organizer, price, imageUrl } = req.body;
-
-        // The user ID should be available from req.user set by authMiddleware
         const createdBy = req.user.id;
-
         const newEvent = new Event({
             title,
             description,
@@ -21,15 +18,11 @@ exports.createEvent = async (req, res) => {
             imageUrl,
             createdBy
         });
-
         await newEvent.save();
-
-        // Generate registration URL for QR code (production frontend URL)
+        // Generate registration URL for QR code
         const registrationUrl = `https://evnify.netlify.app/register?eventId=${newEvent._id}`;
-        // Generate QR code as base64 PNG
         newEvent.qrCode = await QRCode.toDataURL(registrationUrl, { type: 'image/png' });
         await newEvent.save();
-
         res.status(201).json({ message: 'Event created successfully!', event: newEvent });
     } catch (error) {
         console.error('Error creating event:', error);
@@ -134,7 +127,6 @@ exports.registerForEvent = async (req, res) => {
         if (!event) {
             return res.status(404).json({ message: 'Event not found.' });
         }
-        // Only add if not already registered
         if (!event.registeredUsers.includes(user._id)) {
             event.registeredUsers.push(user._id);
             await event.save();

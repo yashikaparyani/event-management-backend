@@ -1,5 +1,7 @@
 const Role = require('../models/Role');
 const Permission = require('../models/Permission');
+const User = require('../models/User');
+const bcrypt = require('bcryptjs');
 
 const defaultPermissions = [
   { name: 'manage_events', description: 'Can create, edit, and delete events', category: 'event' },
@@ -9,14 +11,17 @@ const defaultPermissions = [
   { name: 'view_reports', description: 'Can view reports', category: 'system' },
   { name: 'view_content', description: 'Can view event content', category: 'content' },
   { name: 'view_roles', description: 'Can view roles and permissions', category: 'system' },
-  { name: 'manage_roles', description: 'Can manage roles and permissions', category: 'system' }
+  { name: 'manage_roles', description: 'Can manage roles and permissions', category: 'system' },
+  { name: 'edit_user', description: 'Can edit users', category: 'user' },
+  { name: 'delete_user', description: 'Can delete users', category: 'user' },
+  { name: 'create_user', description: 'Can create users', category: 'user' },
 ];
 
 const defaultRoles = [
   {
     name: 'admin',
     description: 'Administrator with full access',
-    permissions: ['manage_events', 'manage_users', 'assign_volunteers', 'register_event', 'view_reports', 'view_content', 'view_roles', 'manage_roles'],
+    permissions: ['manage_events', 'manage_users', 'assign_volunteers', 'register_event', 'view_reports', 'view_content', 'view_roles', 'manage_roles', 'edit_user', 'delete_user', 'create_user'],
     isDefault: false
   },
   {
@@ -80,6 +85,30 @@ async function initializeRolesAndPermissions() {
       );
     }
     console.log('All roles created/updated');
+
+    // Create default admin user if not exists
+    const adminEmail = 'admin@example.com';
+    const adminPassword = 'Admin123';
+    const adminName = 'Admin';
+    const adminRole = await Role.findOne({ name: 'admin' });
+    if (!adminRole) {
+      throw new Error('Admin role not found');
+    }
+    let adminUser = await User.findOne({ email: adminEmail });
+    if (!adminUser) {
+      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      adminUser = new User({
+        name: adminName,
+        email: adminEmail,
+        password: hashedPassword,
+        role: adminRole._id,
+        status: 'approved'
+      });
+      await adminUser.save();
+      console.log('Default admin user created:', adminEmail);
+    } else {
+      console.log('Default admin user already exists:', adminEmail);
+    }
 
     console.log('Roles and permissions initialization completed');
   } catch (error) {

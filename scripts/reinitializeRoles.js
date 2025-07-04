@@ -12,10 +12,11 @@ mongoose.connect('mongodb://localhost:27017/event_management', {
     console.log('Connected to MongoDB');
     
     try {
-        // Drop existing roles and permissions
+        // Drop existing users, roles and permissions
+        await require('../models/User').deleteMany({});
         await Role.deleteMany({});
         await Permission.deleteMany({});
-        console.log('Dropped existing roles and permissions');
+        console.log('Dropped existing users, roles and permissions');
         
         // Initialize new roles and permissions
         await initializeRolesAndPermissions();
