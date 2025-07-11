@@ -69,9 +69,14 @@ router.put('/users/:id', authMiddleware, checkPermission('update_user'), async (
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+    // FIX: Always set role as ObjectId, not string
+    const roleDoc = await require('../models/Role').findOne({ name: role });
+    if (!roleDoc) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
     user.name = name;
     user.email = email;
-    user.role = role; 
+    user.role = roleDoc._id;
     await user.save();
     res.json({ message: 'User updated successfully', user });
   } catch (error) {
