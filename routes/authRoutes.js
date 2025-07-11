@@ -23,6 +23,10 @@ router.post('/login', async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
+    // Defensive: check if user.role exists and has a name
+    if (!user.role || !user.role.name) {
+      return res.status(400).json({ message: 'User role is missing or invalid. Please contact admin.' });
+    }
     if (user.role.name === 'coordinator' && user.status !== 'approved') {
       return res.status(403).json({ 
         message: 'Your account is pending approval',
@@ -32,7 +36,7 @@ router.post('/login', async (req, res) => {
     }
     const payload = {
       id: user._id,
-      role: user.role.name,
+      role: user.role ? user.role.name : null,
       name: user.name,
       email: user.email,
     };
@@ -144,6 +148,9 @@ router.put('/approve-user/:userId', authMiddleware, checkPermission('approve'), 
     const user = await User.findById(userId).populate('role');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
+    }
+    if (!user.role || !user.role.name) {
+      return res.status(400).json({ message: 'User role is missing or invalid. Please contact admin.' });
     }
     if (user.role.name !== 'coordinator') {
       return res.status(400).json({ message: 'This user type does not require approval' });
