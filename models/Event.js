@@ -31,6 +31,11 @@ const eventSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    coordinator: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    },
     price: {
         type: Number,
         default: 0,

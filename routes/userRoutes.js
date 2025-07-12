@@ -82,7 +82,7 @@ router.put('/users/:id', authMiddleware, checkPermission('update_user'), async (
 // POST /api/users - Admin creates a new user
 router.post('/users', authMiddleware, checkPermission('create_user'), async (req, res) => {
   try {
-    const { name, email, password, role, eventInterest, coordinationArea, availability, skills, phone } = req.body;
+    const { name, email, password, role, eventInterest, coordinationArea, availability, skills, phone, assignedEventId } = req.body;
     if (!name || !email || !password || !role) {
       return res.status(400).json({ message: 'Please provide name, email, password, and role' });
     }
@@ -129,6 +129,23 @@ router.post('/users', authMiddleware, checkPermission('create_user'), async (req
       newUser.skills = skills;
     }
     await newUser.save();
+    // Assign event to coordinator if provided
+    if (role === 'coordinator' && assignedEventId) {
+      const Event = require('../models/Event');
+      const event = await Event.findById(assignedEventId);
+      if (!event) {
+        // Rollback user creation
+        await User.findByIdAndDelete(newUser._id);
+        return res.status(400).json({ message: 'Selected event not found.' });
+      }
+      if (event.coordinator) {
+        // Rollback user creation
+        await User.findByIdAndDelete(newUser._id);
+        return res.status(400).json({ message: 'This event already has a coordinator assigned.' });
+      }
+      event.coordinator = newUser._id;
+      await event.save();
+    }
     res.status(201).json({ message: 'User created successfully', user: { id: newUser._id, name: newUser.name, email: newUser.email, role: roleDoc.name, status: newUser.status } });
   } catch (error) {
     console.error('Error in POST /api/users:', {
