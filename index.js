@@ -7,8 +7,21 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const initializeRolesAndPermissions = require('./config/initializeRolesAndPermissions');
 const path = require('path');
+const http = require('http');
+const socketIo = require('socket.io');
+const SocketManager = require('./socket/socketManager');
 
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+    cors: {
+        origin: ["http://localhost:3000", "http://127.0.0.1:5500", "https://evnify.netlify.app"],
+        methods: ["GET", "POST"]
+    }
+});
+
+// Initialize socket manager
+const socketManager = new SocketManager(io);
 
 // Updated CORS setup for dynamic origin and preflight support
 const allowedOrigins = [
@@ -47,6 +60,7 @@ app.use('/api', require('./routes/roleRoutes'));
 app.use('/api', require('./routes/userRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/events', require('./routes/eventRoutes'));
+app.use('/api/quizzes', require('./routes/quizRoutes'));
 
 // Serve static files from the client directory
 app.use('/client', express.static(path.join(__dirname, '../client')));
@@ -89,8 +103,9 @@ async function initializeServer() {
 
     // Start the server
     const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
+      console.log('Socket.IO initialized');
     });
   } catch (error) {
     console.error('Server initialization error:', {
