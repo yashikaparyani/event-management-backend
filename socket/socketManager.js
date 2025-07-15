@@ -99,8 +99,12 @@ class SocketManager {
                 totalQuestions: quiz.questions.length
             });
 
-            // If quiz is active, send current question
+            // If quiz is active, notify participant and send current question
             if (session.status === 'active' && session.currentQuestionIndex < quiz.questions.length) {
+                socket.emit('quiz-started', {
+                    quizId: quizId,
+                    totalQuestions: quiz.questions.length
+                });
                 const currentQuestion = quiz.questions[session.currentQuestionIndex];
                 socket.emit('current-question', {
                     questionIndex: session.currentQuestionIndex,
@@ -315,4 +319,4 @@ class SocketManager {
     }
 }
 
-module.exports = SocketManager; 
+module.exports = SocketManager;
