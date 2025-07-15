@@ -99,12 +99,8 @@ class SocketManager {
                 totalQuestions: quiz.questions.length
             });
 
-            // If quiz is active, notify participant and send current question
+            // If quiz is active, send current question
             if (session.status === 'active' && session.currentQuestionIndex < quiz.questions.length) {
-                socket.emit('quiz-started', {
-                    quizId: quizId,
-                    totalQuestions: quiz.questions.length
-                });
                 const currentQuestion = quiz.questions[session.currentQuestionIndex];
                 socket.emit('current-question', {
                     questionIndex: session.currentQuestionIndex,
@@ -166,7 +162,7 @@ class SocketManager {
             const { quizId, userId } = data;
             
             // Validate coordinator permissions
-            const user = await User.findById(userId).populate('role');
+            const user = await User.findById(userId);
             const quiz = await Quiz.findById(quizId);
             
             if (!user || !quiz || user.role.name !== 'coordinator') {
@@ -319,4 +315,4 @@ class SocketManager {
     }
 }
 
-module.exports = SocketManager;
+module.exports = SocketManager; 
