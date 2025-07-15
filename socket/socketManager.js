@@ -162,7 +162,7 @@ class SocketManager {
             const { quizId, userId } = data;
             
             // Validate coordinator permissions
-            const user = await User.findById(userId);
+            const user = await User.findById(userId).populate('role');
             const quiz = await Quiz.findById(quizId);
             
             if (!user || !quiz || user.role.name !== 'coordinator') {
