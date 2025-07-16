@@ -335,6 +335,12 @@ class SocketManager {
         try {
             const { eventId, userId } = data;
             const user = await User.findById(userId).populate('role');
+            console.log('[handleStartDebate]', {
+                eventId,
+                userId,
+                userFound: !!user,
+                userRole: user && user.role ? user.role.name : null
+            });
             if (!user || user.role.name !== 'coordinator') {
                 socket.emit('error', { message: 'Unauthorized' });
                 return;
@@ -348,6 +354,7 @@ class SocketManager {
             await session.save();
             this.io.to(`debate-${eventId}`).emit('debate-state-update', { status: 'active' });
         } catch (error) {
+            console.error('Error in handleStartDebate:', error);
             socket.emit('error', { message: 'Failed to start debate' });
         }
     }
