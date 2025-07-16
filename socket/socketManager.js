@@ -356,11 +356,24 @@ class SocketManager {
         try {
             const { eventId, userId, role } = data;
             const user = await User.findById(userId).populate('role');
-            if (!user || user.role.name !== role) {
-                socket.emit('error', { message: 'Unauthorized' });
+            let session = await DebateSession.findOne({ event: eventId });
+            console.log('[handleJoinDebate]', {
+                eventId,
+                userId,
+                role,
+                userFound: !!user,
+                userRole: user && user.role ? user.role.name : null,
+                sessionFound: !!session,
+                sessionStatus: session ? session.status : null
+            });
+            if (!user) {
+                socket.emit('error', { message: 'User not found' });
                 return;
             }
-            let session = await DebateSession.findOne({ event: eventId });
+            if (!user.role || user.role.name !== role) {
+                socket.emit('error', { message: `Role mismatch: user role is ${user.role ? user.role.name : 'none'}, expected ${role}` });
+                return;
+            }
             if (!session || session.status !== 'active') {
                 socket.emit('error', { message: 'Debate not active' });
                 return;
@@ -376,6 +389,7 @@ class SocketManager {
             socket.emit('debate-joined', { eventId, role, status: session.status, currentSpeaker: session.currentSpeaker, timer: session.speakerTimer, messages: session.messages, votes: session.votes });
             this.io.to(`debate-${eventId}`).emit('debate-state-update', { participants: session.participants, audience: session.audience, currentSpeaker: session.currentSpeaker, timer: session.speakerTimer });
         } catch (error) {
+            console.error('Error in handleJoinDebate:', error);
             socket.emit('error', { message: 'Failed to join debate' });
         }
     }
