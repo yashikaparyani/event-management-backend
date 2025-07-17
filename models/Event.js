@@ -45,6 +45,11 @@ const eventSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    type: {
+        type: String,
+        enum: ['Quiz', 'Debate', 'Poetry'],
+        required: true
+    },
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
