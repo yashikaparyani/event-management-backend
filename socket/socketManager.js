@@ -1,7 +1,6 @@
 const QuizSession = require('../models/QuizSession');
 const Quiz = require('../models/Quiz');
 const User = require('../models/User');
-const DebateSession = require('../models/DebateSession');
 
 class SocketManager {
     constructor(io) {
@@ -36,29 +35,6 @@ class SocketManager {
 
             socket.on('show-leaderboard', async (data) => {
                 await this.handleShowLeaderboard(socket, data);
-            });
-
-            // --- Debate Events ---
-            socket.on('start-debate', async (data) => {
-                await this.handleStartDebate(socket, data);
-            });
-            socket.on('join-debate', async (data) => {
-                await this.handleJoinDebate(socket, data);
-            });
-            socket.on('assign-speaker', async (data) => {
-                await this.handleAssignSpeaker(socket, data);
-            });
-            socket.on('end-turn', async (data) => {
-                await this.handleEndTurn(socket, data);
-            });
-            socket.on('send-debate-message', async (data) => {
-                await this.handleSendDebateMessage(socket, data);
-            });
-            socket.on('send-vote', async (data) => {
-                await this.handleSendVote(socket, data);
-            });
-            socket.on('end-debate', async (data) => {
-                await this.handleEndDebate(socket, data);
             });
 
             // Disconnect
@@ -327,161 +303,6 @@ class SocketManager {
         } catch (error) {
             console.error('Error showing leaderboard:', error);
             socket.emit('error', { message: 'Failed to load leaderboard' });
-        }
-    }
-
-    // --- Debate Handlers ---
-    async handleStartDebate(socket, data) {
-        try {
-            const { eventId, userId } = data;
-            const user = await User.findById(userId).populate('role');
-            if (!user || user.role.name !== 'coordinator') {
-                socket.emit('error', { message: 'Unauthorized' });
-                return;
-            }
-            let session = await DebateSession.findOne({ event: eventId });
-            if (!session) {
-                session = new DebateSession({ event: eventId, status: 'active', participants: [], audience: [] });
-            } else {
-                session.status = 'active';
-            }
-            await session.save();
-            this.io.to(`debate-${eventId}`).emit('debate-state-update', { status: 'active' });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to start debate' });
-        }
-    }
-
-    async handleJoinDebate(socket, data) {
-        try {
-            const { eventId, userId, role } = data;
-            const user = await User.findById(userId).populate('role');
-            if (!user || user.role.name !== role) {
-                socket.emit('error', { message: 'Unauthorized' });
-                return;
-            }
-            let session = await DebateSession.findOne({ event: eventId });
-            if (!session || session.status !== 'active') {
-                socket.emit('error', { message: 'Debate not active' });
-                return;
-            }
-            // Add user to participants or audience
-            if (role === 'participant' && !session.participants.includes(userId)) {
-                session.participants.push(userId);
-            } else if (role === 'audience' && !session.audience.includes(userId)) {
-                session.audience.push(userId);
-            }
-            await session.save();
-            socket.join(`debate-${eventId}`);
-            socket.emit('debate-joined', { eventId, role, status: session.status, currentSpeaker: session.currentSpeaker, timer: session.speakerTimer, messages: session.messages, votes: session.votes });
-            this.io.to(`debate-${eventId}`).emit('debate-state-update', { participants: session.participants, audience: session.audience, currentSpeaker: session.currentSpeaker, timer: session.speakerTimer });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to join debate' });
-        }
-    }
-
-    async handleAssignSpeaker(socket, data) {
-        try {
-            const { eventId, userId, speakerId, timer } = data;
-            const user = await User.findById(userId).populate('role');
-            if (!user || user.role.name !== 'coordinator') {
-                socket.emit('error', { message: 'Unauthorized' });
-                return;
-            }
-            let session = await DebateSession.findOne({ event: eventId });
-            if (!session || session.status !== 'active') {
-                socket.emit('error', { message: 'Debate not active' });
-                return;
-            }
-            session.currentSpeaker = speakerId;
-            session.speakerTimer = timer;
-            await session.save();
-            this.io.to(`debate-${eventId}`).emit('debate-state-update', { currentSpeaker: speakerId, timer });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to assign speaker' });
-        }
-    }
-
-    async handleEndTurn(socket, data) {
-        try {
-            const { eventId, userId } = data;
-            const user = await User.findById(userId).populate('role');
-            if (!user || user.role.name !== 'coordinator') {
-                socket.emit('error', { message: 'Unauthorized' });
-                return;
-            }
-            let session = await DebateSession.findOne({ event: eventId });
-            if (!session || session.status !== 'active') {
-                socket.emit('error', { message: 'Debate not active' });
-                return;
-            }
-            session.currentSpeaker = null;
-            session.speakerTimer = 0;
-            await session.save();
-            this.io.to(`debate-${eventId}`).emit('debate-state-update', { currentSpeaker: null, timer: 0 });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to end turn' });
-        }
-    }
-
-    async handleSendDebateMessage(socket, data) {
-        try {
-            const { eventId, userId, role, content } = data;
-            const user = await User.findById(userId).populate('role');
-            if (!user || user.role.name !== role) {
-                socket.emit('error', { message: 'Unauthorized' });
-                return;
-            }
-            let session = await DebateSession.findOne({ event: eventId });
-            if (!session || session.status !== 'active') {
-                socket.emit('error', { message: 'Debate not active' });
-                return;
-            }
-            session.messages.push({ sender: userId, role, content });
-            await session.save();
-            this.io.to(`debate-${eventId}`).emit('debate-message', { sender: userId, role, content, timestamp: new Date() });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to send message' });
-        }
-    }
-
-    async handleSendVote(socket, data) {
-        try {
-            const { eventId, userId, voteType } = data;
-            const user = await User.findById(userId);
-            let session = await DebateSession.findOne({ event: eventId });
-            if (!session || session.status !== 'active') {
-                socket.emit('error', { message: 'Debate not active' });
-                return;
-            }
-            session.votes.push({ voter: userId, voteType });
-            await session.save();
-            this.io.to(`debate-${eventId}`).emit('debate-vote', { voter: userId, voteType });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to send vote' });
-        }
-    }
-
-    async handleEndDebate(socket, data) {
-        try {
-            const { eventId, userId } = data;
-            const user = await User.findById(userId).populate('role');
-            if (!user || user.role.name !== 'coordinator') {
-                socket.emit('error', { message: 'Unauthorized' });
-                return;
-            }
-            let session = await DebateSession.findOne({ event: eventId });
-            if (!session) {
-                socket.emit('error', { message: 'Debate session not found' });
-                return;
-            }
-            session.status = 'finished';
-            session.currentSpeaker = null;
-            session.speakerTimer = 0;
-            await session.save();
-            this.io.to(`debate-${eventId}`).emit('debate-state-update', { status: 'finished' });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to end debate' });
         }
     }
 
