@@ -4,7 +4,7 @@ const QRCode = require('qrcode');
 // Create a new event
 exports.createEvent = async (req, res) => {
     try {
-        const { title, description, date, time, location, capacity, organizer, price, imageUrl, type } = req.body;
+        const { title, description, date, time, location, capacity, organizer, price, imageUrl } = req.body;
         const createdBy = req.user.id;
         const newEvent = new Event({
             title,
@@ -16,7 +16,6 @@ exports.createEvent = async (req, res) => {
             organizer,
             price,
             imageUrl,
-            type, // <-- Add this line
             createdBy
         });
         await newEvent.save();
