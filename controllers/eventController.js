@@ -35,7 +35,12 @@ exports.createEvent = async (req, res) => {
 exports.getEvents = async (req, res) => {
     try {
         let events;
-        if (req.user.role === 'admin' || req.user.role === 'audience') {
+        if (
+            req.user.role === 'admin' ||
+            req.user.role === 'audience' ||
+            req.user.role?.name === 'admin' ||
+            req.user.role?.name === 'audience'
+        ) {
             events = await Event.find();
         } else if (req.user.role === 'coordinator') {
             events = await Event.find({
