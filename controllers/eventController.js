@@ -34,7 +34,33 @@ exports.createEvent = async (req, res) => {
 // Get all events
 exports.getEvents = async (req, res) => {
     try {
-        const events = await Event.find();
+        let events;
+        if (req.user.role === 'admin' || req.user.role === 'audience') {
+            events = await Event.find();
+        } else if (req.user.role === 'coordinator') {
+            events = await Event.find({
+                $or: [
+                    { type: { $ne: 'Remix' } },
+                    { type: 'Remix', assignedCoordinators: req.user._id }
+                ]
+            });
+        } else if (req.user.role === 'volunteer') {
+            events = await Event.find({
+                $or: [
+                    { type: { $ne: 'Remix' } },
+                    { type: 'Remix', assignedVolunteers: req.user._id }
+                ]
+            });
+        } else if (req.user.role === 'participant') {
+            events = await Event.find({
+                $or: [
+                    { type: { $ne: 'Remix' } },
+                    { type: 'Remix', registeredParticipants: req.user._id }
+                ]
+            });
+        } else {
+            events = await Event.find({ type: { $ne: 'Remix' } });
+        }
         res.status(200).json(events);
     } catch (error) {
         console.error('Error fetching events:', error);

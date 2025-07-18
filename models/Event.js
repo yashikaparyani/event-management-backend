@@ -47,9 +47,17 @@ const eventSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['Quiz', 'Debate', 'Poetry'],
+        enum: ['Quiz', 'Debate', 'Poetry', 'Remix'],
         required: true
     },
+    assignedCoordinators: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
+    registeredParticipants: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
