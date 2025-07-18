@@ -3,15 +3,20 @@ const Poetry = require('../models/Poetry');
 // Submit a poem
 exports.submitPoem = async (req, res) => {
   try {
-    const { eventId } = req.body;
-    const { poetName, title, text, fileUrl } = req.body;
+    const { eventId, poetName, title, text } = req.body;
     const user = req.user._id;
+    let fileUrl = '', fileName = '', fileType = '';
+    if (req.file) {
+      fileUrl = `/uploads/poetry/${req.file.filename}`;
+      fileName = req.file.originalname;
+      fileType = req.file.mimetype;
+    }
     // Prevent duplicate submissions by the same user for the same event
     const existing = await Poetry.findOne({ event: eventId, user });
     if (existing) {
       return res.status(400).json({ message: 'You have already submitted a poem for this event.' });
     }
-    const poem = new Poetry({ event: eventId, user, poetName, title, text, fileUrl });
+    const poem = new Poetry({ event: eventId, user, poetName, title, text, fileUrl, fileType, fileName });
     await poem.save();
     res.status(201).json({ message: 'Poem submitted successfully.' });
   } catch (err) {
