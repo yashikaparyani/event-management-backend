@@ -27,4 +27,9 @@ router.get('/:eventId/submissions', poetryController.getSubmissions);
 // Delete a poem (admin/coordinator only)
 router.delete('/:poemId', authMiddleware, checkPermission(['admin', 'coordinator']), poetryController.deletePoem);
 
+// Like a poem (all authenticated users)
+router.post('/:poemId/like', authMiddleware, poetryController.likePoem);
+// Unlike a poem (all authenticated users)
+router.post('/:poemId/unlike', authMiddleware, poetryController.unlikePoem);
+
 module.exports = router; 
