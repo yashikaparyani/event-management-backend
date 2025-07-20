@@ -90,6 +90,12 @@ exports.getEventById = async (req, res) => {
 // Update an event by ID
 exports.updateEvent = async (req, res) => {
     try {
+        // Ensure assignedCoordinators is always an array if present
+        if (req.body.assignedCoordinators) {
+            if (!Array.isArray(req.body.assignedCoordinators)) {
+                req.body.assignedCoordinators = [req.body.assignedCoordinators];
+            }
+        }
         const event = await Event.findByIdAndUpdate(
             req.params.id,
             req.body,
