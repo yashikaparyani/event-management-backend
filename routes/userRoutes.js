@@ -144,6 +144,11 @@ router.post('/users', authMiddleware, checkPermission('create_user'), async (req
         return res.status(400).json({ message: 'This event already has a coordinator assigned.' });
       }
       event.coordinator = newUser._id;
+      // If event is Remix, also add to assignedCoordinators
+      if (event.type === 'Remix') {
+        if (!event.assignedCoordinators) event.assignedCoordinators = [];
+        event.assignedCoordinators.push(newUser._id);
+      }
       await event.save();
     }
     res.status(201).json({ message: 'User created successfully', user: { id: newUser._id, name: newUser.name, email: newUser.email, role: roleDoc.name, status: newUser.status } });
