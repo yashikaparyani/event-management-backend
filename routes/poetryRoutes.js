@@ -19,7 +19,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Submit a poem (participant only, with file upload)
-router.post('/submit', authMiddleware, checkPermission(['participant']), upload.single('poemFile'), poetryController.submitPoem);
+router.post('/submit', authMiddleware, checkPermission('participant'), upload.single('poemFile'), poetryController.submitPoem);
 
 // Get all submissions for a poetry event (open to all)
 router.get('/:eventId/submissions', poetryController.getSubmissions);
