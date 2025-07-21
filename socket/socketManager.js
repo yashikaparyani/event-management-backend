@@ -1,6 +1,9 @@
 const QuizSession = require('../models/QuizSession');
 const Quiz = require('../models/Quiz');
 const User = require('../models/User');
+const Debate = require('../models/Debate');
+const DebateSession = require('../models/DebateSession');
+const Team = require('../models/Team');
 
 class SocketManager {
     constructor(io) {
@@ -35,6 +38,23 @@ class SocketManager {
 
             socket.on('show-leaderboard', async (data) => {
                 await this.handleShowLeaderboard(socket, data);
+            });
+
+            // Debate events
+            socket.on('join-debate', async (data) => {
+                await this.handleJoinDebate(socket, data);
+            });
+            socket.on('start-debate', async (data) => {
+                await this.handleStartDebate(socket, data);
+            });
+            socket.on('end-debate', async (data) => {
+                await this.handleEndDebate(socket, data);
+            });
+            socket.on('next-speaker', async (data) => {
+                await this.handleNextSpeaker(socket, data);
+            });
+            socket.on('assign-score', async (data) => {
+                await this.handleAssignScore(socket, data);
             });
 
             // Disconnect
@@ -303,6 +323,146 @@ class SocketManager {
         } catch (error) {
             console.error('Error showing leaderboard:', error);
             socket.emit('error', { message: 'Failed to load leaderboard' });
+        }
+    }
+
+    async handleJoinDebate(socket, data) {
+        try {
+            const { debateId, userId } = data;
+            const user = await User.findById(userId);
+            const debate = await Debate.findById(debateId);
+            if (!user || !debate) {
+                socket.emit('error', { message: 'Invalid user or debate' });
+                return;
+            }
+            // Join socket room
+            socket.join(`debate-${debateId}`);
+            // Send current debate and session state
+            const session = await DebateSession.findOne({ debate: debateId }).populate('currentSpeaker', 'name').populate({ path: 'scores.team', select: 'name' });
+            socket.emit('debate-joined', {
+                debateId,
+                debate,
+                session
+            });
+        } catch (error) {
+            socket.emit('error', { message: 'Failed to join debate' });
+        }
+    }
+
+    async handleStartDebate(socket, data) {
+        try {
+            const { debateId, userId } = data;
+            const debate = await Debate.findById(debateId);
+            const user = await User.findById(userId);
+            if (!debate || !user) {
+                socket.emit('error', { message: 'Invalid debate or user' });
+                return;
+            }
+            if (user.role.name !== 'coordinator' || user._id.toString() !== debate.coordinator.toString()) {
+                socket.emit('error', { message: 'Only coordinator can start the debate' });
+                return;
+            }
+            let session = await DebateSession.findOne({ debate: debateId, status: { $in: ['waiting', 'active'] } });
+            if (!session) {
+                session = new DebateSession({ debate: debateId, status: 'active', startedAt: new Date() });
+                await session.save();
+            } else {
+                session.status = 'active';
+                session.startedAt = new Date();
+                await session.save();
+            }
+            debate.status = 'active';
+            await debate.save();
+            // Broadcast session state
+            this.io.to(`debate-${debateId}`).emit('debate-started', { session });
+        } catch (error) {
+            socket.emit('error', { message: 'Failed to start debate' });
+        }
+    }
+
+    async handleEndDebate(socket, data) {
+        try {
+            const { debateId, userId } = data;
+            const debate = await Debate.findById(debateId);
+            const user = await User.findById(userId);
+            if (!debate || !user) {
+                socket.emit('error', { message: 'Invalid debate or user' });
+                return;
+            }
+            if (user.role.name !== 'coordinator' || user._id.toString() !== debate.coordinator.toString()) {
+                socket.emit('error', { message: 'Only coordinator can end the debate' });
+                return;
+            }
+            const session = await DebateSession.findOne({ debate: debateId, status: 'active' });
+            if (!session) {
+                socket.emit('error', { message: 'No active session' });
+                return;
+            }
+            session.status = 'finished';
+            session.endedAt = new Date();
+            await session.save();
+            debate.status = 'finished';
+            await debate.save();
+            this.io.to(`debate-${debateId}`).emit('debate-ended', { session });
+        } catch (error) {
+            socket.emit('error', { message: 'Failed to end debate' });
+        }
+    }
+
+    async handleNextSpeaker(socket, data) {
+        try {
+            const { debateId, userId, nextSpeakerId } = data;
+            const debate = await Debate.findById(debateId);
+            const user = await User.findById(userId);
+            if (!debate || !user) {
+                socket.emit('error', { message: 'Invalid debate or user' });
+                return;
+            }
+            if (user.role.name !== 'coordinator' || user._id.toString() !== debate.coordinator.toString()) {
+                socket.emit('error', { message: 'Only coordinator can change speaker' });
+                return;
+            }
+            const session = await DebateSession.findOne({ debate: debateId, status: 'active' });
+            if (!session) {
+                socket.emit('error', { message: 'No active session' });
+                return;
+            }
+            session.currentSpeaker = nextSpeakerId;
+            await session.save();
+            this.io.to(`debate-${debateId}`).emit('speaker-changed', { currentSpeaker: nextSpeakerId });
+        } catch (error) {
+            socket.emit('error', { message: 'Failed to change speaker' });
+        }
+    }
+
+    async handleAssignScore(socket, data) {
+        try {
+            const { debateId, userId, teamId, points } = data;
+            const debate = await Debate.findById(debateId);
+            const user = await User.findById(userId);
+            if (!debate || !user) {
+                socket.emit('error', { message: 'Invalid debate or user' });
+                return;
+            }
+            if (user.role.name !== 'coordinator' || user._id.toString() !== debate.coordinator.toString()) {
+                socket.emit('error', { message: 'Only coordinator can assign score' });
+                return;
+            }
+            const session = await DebateSession.findOne({ debate: debateId, status: 'active' });
+            if (!session) {
+                socket.emit('error', { message: 'No active session' });
+                return;
+            }
+            let score = session.scores.find(s => s.team.toString() === teamId);
+            if (!score) {
+                session.scores.push({ team: teamId, points });
+            } else {
+                score.points += points;
+            }
+            await session.save();
+            this.io.to(`debate-${debateId}`).emit('score-updated', { scores: session.scores });
+        } catch (error) {
+            socket.emit('error', { message: 'Failed to assign score' });
         }
     }
 
