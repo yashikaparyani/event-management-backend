@@ -46,7 +46,7 @@ exports.getEvents = async (req, res) => {
             events = await Event.find({
                 $or: [
                     { type: { $ne: 'Remix' } },
-                    { type: 'Remix', assignedCoordinators: req.user._id }
+                    { type: 'Remix', assignedCoordinators: { $in: [req.user._id, req.user.id, String(req.user._id), String(req.user.id)] } }
                 ]
             });
         } else if (req.user.role === 'volunteer') {
