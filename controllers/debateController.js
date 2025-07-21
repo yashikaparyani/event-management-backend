@@ -11,7 +11,6 @@ exports.createDebate = async (req, res) => {
     const event = await Event.findById(eventId);
     if (!event) return res.status(404).json({ message: 'Event not found' });
     // Only allow debate type events
-    
     if (event.type !== 'Debate') return res.status(400).json({ message: 'Not a debate event' });
     // Coordinator is the event's coordinator
     const debate = new Debate({
