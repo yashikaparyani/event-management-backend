@@ -46,7 +46,7 @@ exports.getEvents = async (req, res) => {
             events = await Event.find({
                 $or: [
                     { type: { $ne: 'Remix' } },
-                    { type: 'Remix', assignedCoordinators: { $in: [req.user._id, req.user.id, String(req.user._id), String(req.user.id)] } }
+                    { type: 'Remix', assignedCoordinators: req.user._id }
                 ]
             });
         } else if (req.user.role === 'volunteer') {
@@ -90,12 +90,6 @@ exports.getEventById = async (req, res) => {
 // Update an event by ID
 exports.updateEvent = async (req, res) => {
     try {
-        // Ensure assignedCoordinators is always an array if present
-        if (req.body.assignedCoordinators) {
-            if (!Array.isArray(req.body.assignedCoordinators)) {
-                req.body.assignedCoordinators = [req.body.assignedCoordinators];
-            }
-        }
         const event = await Event.findByIdAndUpdate(
             req.params.id,
             req.body,
