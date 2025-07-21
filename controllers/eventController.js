@@ -43,28 +43,13 @@ exports.getEvents = async (req, res) => {
         ) {
             events = await Event.find();
         } else if (req.user.role === 'coordinator') {
-            events = await Event.find({
-                $or: [
-                    { type: { $ne: 'Remix' } },
-                    { type: 'Remix', coordinator: req.user._id }
-                ]
-            });
+            events = await Event.find();
         } else if (req.user.role === 'volunteer') {
-            events = await Event.find({
-                $or: [
-                    { type: { $ne: 'Remix' } },
-                    { type: 'Remix', assignedVolunteers: req.user._id }
-                ]
-            });
+            events = await Event.find();
         } else if (req.user.role === 'participant') {
-            events = await Event.find({
-                $or: [
-                    { type: { $ne: 'Remix' } },
-                    { type: 'Remix', registeredParticipants: req.user._id }
-                ]
-            });
+            events = await Event.find();
         } else {
-            events = await Event.find({ type: { $ne: 'Remix' } });
+            events = await Event.find();
         }
         res.status(200).json(events);
     } catch (error) {
