@@ -5,6 +5,7 @@ const router = express.Router();
 const User = require('../models/User');
 const authMiddleware = require('../middleware/authMiddleware');
 const checkPermission = require('../middleware/checkPermission');
+const mongoose = require('mongoose');
 
 // GET /api/users - Get all users (admin only)
 router.get('/users', authMiddleware, checkPermission('admin_panel'), async (req, res) => {
@@ -144,6 +145,15 @@ router.post('/users', authMiddleware, checkPermission('create_user'), async (req
         return res.status(400).json({ message: 'This event already has a coordinator assigned.' });
       }
       event.coordinator = newUser._id;
+      // Add to assignedCoordinators if Remix
+      if (event.type === 'Remix') {
+        if (!event.assignedCoordinators) event.assignedCoordinators = [];
+        const coordId = typeof newUser._id === 'string' ? mongoose.Types.ObjectId(newUser._id) : newUser._id;
+        if (!event.assignedCoordinators.map(id => String(id)).includes(String(coordId))) {
+          event.assignedCoordinators.push(coordId);
+        }
+        console.log('Assigned coordinator to Remix event:', event._id, 'assignedCoordinators:', event.assignedCoordinators);
+      }
       await event.save();
     }
     res.status(201).json({ message: 'User created successfully', user: { id: newUser._id, name: newUser.name, email: newUser.email, role: roleDoc.name, status: newUser.status } });

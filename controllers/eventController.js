@@ -1,5 +1,6 @@
 const Event = require('../models/Event');
 const QRCode = require('qrcode');
+const mongoose = require('mongoose');
 
 // Create a new event
 exports.createEvent = async (req, res) => {
@@ -34,6 +35,7 @@ exports.createEvent = async (req, res) => {
 // Get all events
 exports.getEvents = async (req, res) => {
     try {
+        console.log('Fetching events for user:', req.user);
         let events;
         if (
             req.user.role === 'admin' ||
@@ -43,29 +45,34 @@ exports.getEvents = async (req, res) => {
         ) {
             events = await Event.find();
         } else if (req.user.role === 'coordinator') {
+            // Ensure _id is ObjectId for query
+            const userId = mongoose.Types.ObjectId(req.user._id || req.user.id);
             events = await Event.find({
                 $or: [
                     { type: { $ne: 'Remix' } },
-                    { type: 'Remix', assignedCoordinators: req.user._id }
+                    { type: 'Remix', assignedCoordinators: userId }
                 ]
             });
         } else if (req.user.role === 'volunteer') {
+            const userId = mongoose.Types.ObjectId(req.user._id || req.user.id);
             events = await Event.find({
                 $or: [
                     { type: { $ne: 'Remix' } },
-                    { type: 'Remix', assignedVolunteers: req.user._id }
+                    { type: 'Remix', assignedVolunteers: userId }
                 ]
             });
         } else if (req.user.role === 'participant') {
+            const userId = mongoose.Types.ObjectId(req.user._id || req.user.id);
             events = await Event.find({
                 $or: [
                     { type: { $ne: 'Remix' } },
-                    { type: 'Remix', registeredParticipants: req.user._id }
+                    { type: 'Remix', registeredParticipants: userId }
                 ]
             });
         } else {
             events = await Event.find({ type: { $ne: 'Remix' } });
         }
+        console.log('Events found:', events.map(e => ({id: e._id, title: e.title, assignedCoordinators: e.assignedCoordinators})));
         res.status(200).json(events);
     } catch (error) {
         console.error('Error fetching events:', error);
@@ -97,6 +104,16 @@ exports.updateEvent = async (req, res) => {
         );
         if (!event) {
             return res.status(404).json({ message: 'Event not found' });
+        }
+        // Ensure assignedCoordinators is updated for Remix events
+        if (event.type === 'Remix' && event.coordinator) {
+            if (!event.assignedCoordinators) event.assignedCoordinators = [];
+            const coordId = typeof event.coordinator === 'string' ? mongoose.Types.ObjectId(event.coordinator) : event.coordinator;
+            if (!event.assignedCoordinators.map(id => String(id)).includes(String(coordId))) {
+                event.assignedCoordinators.push(coordId);
+                await event.save();
+            }
+            console.log('Updated assignedCoordinators for Remix event:', event._id, 'assignedCoordinators:', event.assignedCoordinators);
         }
         res.status(200).json({ message: 'Event updated successfully!', event });
     } catch (error) {
