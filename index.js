@@ -61,8 +61,8 @@ app.use('/api', require('./routes/userRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/events', require('./routes/eventRoutes'));
 app.use('/api/quizzes', require('./routes/quizRoutes'));
-app.use('/api/poetry', require('./routes/poetryRoutes'));
 app.use('/api/debates', require('./routes/debateRoutes'));
+app.use('/api/poetry', require('./routes/poetryRoutes'));
 
 // Serve static files from the client directory
 app.use('/client', express.static(path.join(__dirname, '../client')));

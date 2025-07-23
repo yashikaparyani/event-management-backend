@@ -1,102 +1,144 @@
-const Poetry = require('../models/Poetry');
+const Event = require('../models/Event');
+const mongoose = require('mongoose');
 
-// Submit a poem
-exports.submitPoem = async (req, res) => {
-  try {
-    const { eventId, poetName, title, text } = req.body;
-    const user = req.user._id;
-    let fileUrl = '', fileName = '', fileType = '';
-    if (req.file) {
-      fileUrl = `/uploads/poetry/${req.file.filename}`;
-      fileName = req.file.originalname;
-      fileType = req.file.mimetype;
+// Poetry Topic Schema
+const poetryTopicSchema = new mongoose.Schema({
+    eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true },
+    title: { type: String, required: true },
+    description: String,
+    createdAt: { type: Date, default: Date.now }
+});
+
+// Poetry Submission Schema
+const poetrySubmissionSchema = new mongoose.Schema({
+    eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true },
+    participant: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    title: { type: String, required: true },
+    content: String,
+    pdfUrl: String,
+    audioUrl: String,
+    createdAt: { type: Date, default: Date.now }
+});
+
+const PoetryTopic = mongoose.model('PoetryTopic', poetryTopicSchema);
+const PoetrySubmission = mongoose.model('PoetrySubmission', poetrySubmissionSchema);
+
+// Get all poetry events
+exports.getPoetryEvents = async (req, res) => {
+    try {
+        const poetryEvents = await Event.find({ type: 'Poetry' });
+        res.status(200).json(poetryEvents);
+    } catch (error) {
+        console.error('Error fetching poetry events:', error);
+        res.status(500).json({ message: 'Server error' });
     }
-    // Prevent duplicate submissions by the same user for the same event
-    const existing = await Poetry.findOne({ event: eventId, user });
-    if (existing) {
-      return res.status(400).json({ message: 'You have already submitted a poem for this event.' });
-    }
-    const poem = new Poetry({ event: eventId, user, poetName, title, text, fileUrl, fileType, fileName });
-    await poem.save();
-    res.status(201).json({ message: 'Poem submitted successfully.' });
-  } catch (err) {
-    res.status(500).json({ message: 'Error submitting poem', error: err.message });
-  }
 };
 
-// Like a poem
-exports.likePoem = async (req, res) => {
-  try {
-    const { poemId } = req.params;
-    const userId = req.user._id;
-    const poem = await Poetry.findById(poemId);
-    if (!poem) return res.status(404).json({ message: 'Poem not found.' });
-    if (poem.likes.includes(userId)) {
-      return res.status(400).json({ message: 'You have already liked this poem.' });
+// Get a single poetry event
+exports.getPoetryEventById = async (req, res) => {
+    try {
+        const event = await Event.findOne({ _id: req.params.id, type: 'Poetry' });
+        if (!event) {
+            return res.status(404).json({ message: 'Poetry event not found' });
+        }
+        res.status(200).json(event);
+    } catch (error) {
+        console.error('Error fetching poetry event:', error);
+        res.status(500).json({ message: 'Server error' });
     }
-    poem.likes.push(userId);
-    await poem.save();
-    res.json({ message: 'Poem liked.' });
-  } catch (err) {
-    res.status(500).json({ message: 'Error liking poem', error: err.message });
-  }
 };
 
-// Unlike a poem
-exports.unlikePoem = async (req, res) => {
-  try {
-    const { poemId } = req.params;
-    const userId = req.user._id;
-    const poem = await Poetry.findById(poemId);
-    if (!poem) return res.status(404).json({ message: 'Poem not found.' });
-    const idx = poem.likes.indexOf(userId);
-    if (idx === -1) {
-      return res.status(400).json({ message: 'You have not liked this poem.' });
+// Update poetry event details
+exports.updatePoetryEvent = async (req, res) => {
+    try {
+        const event = await Event.findOneAndUpdate(
+            { _id: req.params.id, type: 'Poetry' },
+            req.body,
+            { new: true, runValidators: true }
+        );
+        if (!event) {
+            return res.status(404).json({ message: 'Poetry event not found' });
+        }
+        res.status(200).json({ message: 'Poetry event updated successfully!', event });
+    } catch (error) {
+        console.error('Error updating poetry event:', error);
+        res.status(500).json({ message: 'Server error' });
     }
-    poem.likes.splice(idx, 1);
-    await poem.save();
-    res.json({ message: 'Poem unliked.' });
-  } catch (err) {
-    res.status(500).json({ message: 'Error unliking poem', error: err.message });
-  }
 };
 
-// Get all submissions for a poetry event
-exports.getSubmissions = async (req, res) => {
-  try {
-    const { eventId } = req.params;
-    const userId = req.user?._id?.toString();
-    const poems = await Poetry.find({ event: eventId }).populate('user', 'name');
-    const submissions = poems.map(poem => ({
-      _id: poem._id,
-      event: poem.event,
-      user: poem.user,
-      poetName: poem.poetName,
-      title: poem.title,
-      text: poem.text,
-      fileUrl: poem.fileUrl,
-      fileType: poem.fileType,
-      fileName: poem.fileName,
-      createdAt: poem.createdAt,
-      likeCount: poem.likes.length,
-      likedByCurrentUser: userId ? poem.likes.map(id => id.toString()).includes(userId) : false
-    }));
-    res.json({ submissions });
-  } catch (err) {
-    res.status(500).json({ message: 'Error fetching submissions', error: err.message });
-  }
+// Get topics for a poetry event
+exports.getEventTopics = async (req, res) => {
+    try {
+        const topics = await PoetryTopic.find({ eventId: req.params.id });
+        res.status(200).json(topics);
+    } catch (error) {
+        console.error('Error fetching topics:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
 };
 
-// Delete a poem (admin/coordinator only)
-exports.deletePoem = async (req, res) => {
-  try {
-    const { poemId } = req.params;
-    const deleted = await Poetry.findByIdAndDelete(poemId);
-    if (!deleted) {
-      return res.status(404).json({ message: 'Poem not found.' });
+// Add a new topic
+exports.addTopic = async (req, res) => {
+    try {
+        const { title, description } = req.body;
+        const topic = new PoetryTopic({
+            eventId: req.params.id,
+            title,
+            description
+        });
+        await topic.save();
+        res.status(201).json({ message: 'Topic added successfully', topic });
+    } catch (error) {
+        console.error('Error adding topic:', error);
+        res.status(500).json({ message: 'Server error' });
     }
-    res.json({ message: 'Poem deleted successfully.' });
-  } catch (err) {
-    res.status(500).json({ message: 'Error deleting poem', error: err.message });
-  }
-}; 
+};
+
+// Delete a topic
+exports.deleteTopic = async (req, res) => {
+    try {
+        const topic = await PoetryTopic.findOneAndDelete({
+            _id: req.params.topicId,
+            eventId: req.params.id
+        });
+        if (!topic) {
+            return res.status(404).json({ message: 'Topic not found' });
+        }
+        res.status(200).json({ message: 'Topic deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting topic:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// Get submissions for a poetry event
+exports.getEventSubmissions = async (req, res) => {
+    try {
+        const submissions = await PoetrySubmission.find({ eventId: req.params.id })
+            .populate('participant', 'name');
+        res.status(200).json(submissions);
+    } catch (error) {
+        console.error('Error fetching submissions:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// Submit poetry
+exports.submitPoetry = async (req, res) => {
+    try {
+        const { title, content } = req.body;
+        const submission = new PoetrySubmission({
+            eventId: req.params.id,
+            participant: req.user.id,
+            title,
+            content,
+            pdfUrl: req.files?.pdf?.[0]?.path,
+            audioUrl: req.files?.audio?.[0]?.path
+        });
+        await submission.save();
+        res.status(201).json({ message: 'Poetry submitted successfully', submission });
+    } catch (error) {
+        console.error('Error submitting poetry:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};

@@ -6,9 +6,8 @@ const Event = require('../models/Event');
 
 // 1. Update these mappings as needed for your events
 const typeMappings = [
-  { filter: { title: /poetry/i }, type: 'Poetry' },
-  { filter: { title: /quiz/i }, type: 'Quiz' },
-  { filter: { title: /debate/i }, type: 'Debate' }
+    { filter: { title: /quiz/i }, type: 'Quiz' },
+    { filter: { title: /debate/i }, type: 'Debate' }
 ];
 
 async function updateEventTypes() {
