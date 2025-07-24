@@ -10,6 +10,11 @@ const teamSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  side: {
+    type: String,
+    enum: ['for', 'against'],
+    required: true
+  },
   members: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

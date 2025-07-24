@@ -42,6 +42,84 @@ exports.getDebate = async (req, res) => {
   }
 };
 
+// Register participant for debate
+exports.registerParticipant = async (req, res) => {
+  try {
+    const { debateId } = req.params;
+    const { userId, side } = req.body;
+
+    // Input validation
+    if (!['for', 'against'].includes(side)) {
+      return res.status(400).json({ message: 'Invalid side. Must be "for" or "against"' });
+    }
+
+    // Find debate and user
+    const debate = await Debate.findById(debateId);
+    const user = await User.findById(userId);
+    
+    if (!debate || !user) {
+      return res.status(404).json({ message: 'Debate or user not found' });
+    }
+
+    // Check if debate is active
+    if (debate.status !== 'active') {
+      return res.status(400).json({ message: 'Debate is not active' });
+    }
+
+    // Find or create team
+    let team = await Team.findOne({ 
+      debate: debateId, 
+      side: side 
+    });
+
+    if (!team) {
+      team = new Team({
+        name: `${side.charAt(0).toUpperCase() + side.slice(1)} Team`,
+        debate: debateId,
+        side: side,
+        members: [userId]
+      });
+    } else if (!team.members.includes(userId)) {
+      team.members.push(userId);
+    }
+
+    await team.save();
+
+    // Add team to debate if not already added
+    if (!debate.teams.includes(team._id)) {
+      debate.teams.push(team._id);
+      await debate.save();
+    }
+
+    // Add user to audience if not already added
+    if (!debate.audience.includes(userId)) {
+      debate.audience.push(userId);
+      await debate.save();
+    }
+
+    // Find or create session
+    let session = await DebateSession.findOne({ debate: debateId });
+    if (!session) {
+      session = new DebateSession({
+        debate: debateId,
+        status: 'waiting'
+      });
+      await session.save();
+    }
+
+    res.status(200).json({ 
+      message: 'Successfully registered for debate',
+      team: team._id,
+      side: side,
+      debateStatus: debate.status
+    });
+
+  } catch (error) {
+    console.error('Error registering participant:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 // Register a team (participant)
 exports.registerTeam = async (req, res) => {
   try {
