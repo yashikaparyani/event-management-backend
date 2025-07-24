@@ -16,6 +16,9 @@ router.post('/:debateId/teams', authMiddleware, checkPermission('register'), deb
 // Register as audience
 router.post('/:debateId/audience', authMiddleware, checkPermission('register'), debateController.registerAudience);
 
+// Register participant for debate
+router.post('/:debateId/participants', authMiddleware, checkPermission('register'), debateController.registerParticipant);
+
 // Start debate session (coordinator)
 router.post('/:debateId/session/start', authMiddleware, checkPermission('edit_event'), debateController.startSession);
 
