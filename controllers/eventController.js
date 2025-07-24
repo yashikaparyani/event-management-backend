@@ -47,7 +47,13 @@ exports.getEvents = async (req, res) => {
         } else if (req.user.role === 'volunteer') {
             events = await Event.find();
         } else if (req.user.role === 'participant') {
-            events = await Event.find();
+            // Get events where participant is registered or events that are open for registration
+            events = await Event.find({
+                $or: [
+                    { registeredParticipants: req.user.id },
+                    { registrationOpen: true }
+                ]
+            });
         } else {
             events = await Event.find();
         }
