@@ -7,7 +7,7 @@ const User = require('../models/User');
 // Create a new debate event (admin/coordinator)
 exports.createDebate = async (req, res) => {
   try {
-    const { eventId, topics, rules } = req.body;
+    const { eventId, topics, rules, timerPerParticipant } = req.body;
     const event = await Event.findById(eventId);
     if (!event) return res.status(404).json({ message: 'Event not found' });
     // Only allow debate type events
@@ -17,7 +17,8 @@ exports.createDebate = async (req, res) => {
       event: eventId,
       topics,
       rules,
-      coordinator: event.coordinator
+      coordinator: event.coordinator,
+      timerPerParticipant
     });
     await debate.save();
     res.status(201).json({ message: 'Debate created', debate });
@@ -144,14 +145,34 @@ exports.nextSpeaker = async (req, res) => {
 exports.assignScore = async (req, res) => {
   try {
     const { debateId } = req.params;
-    const { teamId, points } = req.body;
+    const { teamId, clarity, facts, arguments, presentation, knowledge } = req.body;
     const session = await DebateSession.findOne({ debate: debateId, status: 'active' });
     if (!session) return res.status(404).json({ message: 'No active session' });
+    
+    const totalScore = clarity + facts + arguments + presentation + knowledge;
+    
     let score = session.scores.find(s => s.team.toString() === teamId);
     if (!score) {
-      session.scores.push({ team: teamId, points });
+      session.scores.push({
+        team: teamId,
+        points: totalScore,
+        criteria: {
+          clarity,
+          facts,
+          arguments,
+          presentation,
+          knowledge
+        }
+      });
     } else {
-      score.points += points;
+      score.points += totalScore;
+      score.criteria = {
+        clarity: (score.criteria?.clarity || 0) + clarity,
+        facts: (score.criteria?.facts || 0) + facts,
+        arguments: (score.criteria?.arguments || 0) + arguments,
+        presentation: (score.criteria?.presentation || 0) + presentation,
+        knowledge: (score.criteria?.knowledge || 0) + knowledge
+      };
     }
     await session.save();
     res.status(200).json({ message: 'Score updated', session });
@@ -164,10 +185,64 @@ exports.assignScore = async (req, res) => {
 exports.getSession = async (req, res) => {
   try {
     const { debateId } = req.params;
-    const session = await DebateSession.findOne({ debate: debateId }).populate('currentSpeaker', 'name').populate({ path: 'scores.team', select: 'name' });
+    const session = await DebateSession.findOne({ debate: debateId })
+      .populate('currentSpeaker', 'name')
+      .populate({ 
+        path: 'scores.team', 
+        select: 'name',
+        populate: { path: 'members', select: 'name email' }
+      });
     if (!session) return res.status(404).json({ message: 'No session found' });
     res.status(200).json(session);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
-}; 
+};
+
+// Participant flow - Get debate details for participant
+exports.getParticipantDebate = async (req, res) => {
+  try {
+    const { debateId } = req.params;
+    const debate = await Debate.findById(debateId)
+      .populate('event')
+      .populate('coordinator', 'name email')
+      .populate({ 
+        path: 'teams', 
+        populate: { path: 'members', select: 'name email' }
+      });
+    
+    if (!debate) return res.status(404).json({ message: 'Debate not found' });
+    
+    const session = await DebateSession.findOne({ debate: debateId })
+      .populate('currentSpeaker', 'name')
+      .populate({ path: 'scores.team', select: 'name' });
+    
+    res.status(200).json({ debate, session });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Audience flow - Get debate details for audience
+exports.getAudienceDebate = async (req, res) => {
+  try {
+    const { debateId } = req.params;
+    const debate = await Debate.findById(debateId)
+      .populate('event')
+      .populate('coordinator', 'name email')
+      .populate({ 
+        path: 'teams', 
+        populate: { path: 'members', select: 'name email' }
+      });
+    
+    if (!debate) return res.status(404).json({ message: 'Debate not found' });
+    
+    const session = await DebateSession.findOne({ debate: debateId })
+      .populate('currentSpeaker', 'name')
+      .populate({ path: 'scores.team', select: 'name' });
+    
+    res.status(200).json({ debate, session });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
