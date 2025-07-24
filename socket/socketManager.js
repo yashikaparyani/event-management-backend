@@ -56,6 +56,21 @@ class SocketManager {
             socket.on('assign-score', async (data) => {
                 await this.handleAssignScore(socket, data);
             });
+            socket.on('speaker-changed', async (data) => {
+                await this.handleSpeakerChanged(socket, data);
+            });
+            socket.on('your-turn', async (data) => {
+                await this.handleYourTurn(socket, data);
+            });
+            socket.on('timer-update', async (data) => {
+                await this.handleTimerUpdate(socket, data);
+            });
+            socket.on('audience-reaction', async (data) => {
+                await this.handleAudienceReaction(socket, data);
+            });
+            socket.on('show-leaderboard-broadcast', async (data) => {
+                await this.handleShowLeaderboardBroadcast(socket, data);
+            });
 
             // Disconnect
             socket.on('disconnect', () => {
@@ -432,6 +447,106 @@ class SocketManager {
             this.io.to(`debate-${debateId}`).emit('speaker-changed', { currentSpeaker: nextSpeakerId });
         } catch (error) {
             socket.emit('error', { message: 'Failed to change speaker' });
+        }
+    }
+
+    async handleSpeakerChanged(socket, data) {
+        try {
+            const { debateId, currentSpeaker, userId } = data;
+            const debate = await Debate.findById(debateId);
+            const user = await User.findById(userId);
+            if (!debate || !user) {
+                socket.emit('error', { message: 'Invalid debate or user' });
+                return;
+            }
+            if (user.role.name !== 'coordinator') {
+                socket.emit('error', { message: 'Only coordinator can change speaker' });
+                return;
+            }
+            // Broadcast to all participants and audience
+            this.io.to(`debate-${debateId}`).emit('speaker-changed', { currentSpeaker });
+        } catch (error) {
+            socket.emit('error', { message: 'Failed to change speaker' });
+        }
+    }
+
+    async handleYourTurn(socket, data) {
+        try {
+            const { debateId, participantId, userId } = data;
+            const debate = await Debate.findById(debateId);
+            const user = await User.findById(userId);
+            if (!debate || !user) {
+                socket.emit('error', { message: 'Invalid debate or user' });
+                return;
+            }
+            if (user.role.name !== 'coordinator') {
+                socket.emit('error', { message: 'Only coordinator can notify turns' });
+                return;
+            }
+            // Send notification to specific participant
+            this.io.to(`debate-${debateId}`).emit('your-turn', { participantId });
+        } catch (error) {
+            socket.emit('error', { message: 'Failed to send turn notification' });
+        }
+    }
+
+    async handleTimerUpdate(socket, data) {
+        try {
+            const { debateId, timeLeft, userId } = data;
+            const debate = await Debate.findById(debateId);
+            const user = await User.findById(userId);
+            if (!debate || !user) {
+                socket.emit('error', { message: 'Invalid debate or user' });
+                return;
+            }
+            if (user.role.name !== 'coordinator') {
+                socket.emit('error', { message: 'Only coordinator can update timer' });
+                return;
+            }
+            // Broadcast timer update to all participants and audience
+            this.io.to(`debate-${debateId}`).emit('timer-updated', { timeLeft });
+        } catch (error) {
+            socket.emit('error', { message: 'Failed to update timer' });
+        }
+    }
+
+    async handleAudienceReaction(socket, data) {
+        try {
+            const { debateId, speakerId, reaction, userId } = data;
+            const debate = await Debate.findById(debateId);
+            const user = await User.findById(userId);
+            if (!debate || !user) {
+                socket.emit('error', { message: 'Invalid debate or user' });
+                return;
+            }
+            if (user.role.name !== 'audience') {
+                socket.emit('error', { message: 'Only audience can react' });
+                return;
+            }
+            // Send reaction to coordinator for tracking
+            this.io.to(`debate-${debateId}`).emit('audience-reaction', { speakerId, reaction, userId });
+        } catch (error) {
+            socket.emit('error', { message: 'Failed to process reaction' });
+        }
+    }
+
+    async handleShowLeaderboardBroadcast(socket, data) {
+        try {
+            const { debateId, userId } = data;
+            const debate = await Debate.findById(debateId);
+            const user = await User.findById(userId);
+            if (!debate || !user) {
+                socket.emit('error', { message: 'Invalid debate or user' });
+                return;
+            }
+            if (user.role.name !== 'coordinator') {
+                socket.emit('error', { message: 'Only coordinator can show leaderboard' });
+                return;
+            }
+            // Broadcast leaderboard show to all participants and audience
+            this.io.to(`debate-${debateId}`).emit('show-leaderboard', { debateId });
+        } catch (error) {
+            socket.emit('error', { message: 'Failed to show leaderboard' });
         }
     }
 
