@@ -128,6 +128,33 @@ exports.getRegisteredEvents = async (req, res) => {
     }
 };
 
+// Get participants for an event (for debate, returns registered users)
+exports.getParticipants = async (req, res) => {
+    try {
+        const event = await Event.findById(req.params.id).populate('registeredUsers');
+        if (!event) return res.status(404).json({ message: 'Event not found' });
+        // For debate: include side info if present
+        let participants = [];
+        if (event.type === 'Debate' && Array.isArray(event.participants)) {
+            participants = event.participants.map(p => ({
+                _id: p._id,
+                name: p.name,
+                side: p.side || null
+            }));
+        } else if (Array.isArray(event.registeredUsers)) {
+            participants = event.registeredUsers.map(u => ({
+                _id: u._id,
+                name: u.name || '',
+                side: null
+            }));
+        }
+        res.status(200).json(participants);
+    } catch (error) {
+        console.error('Error fetching participants:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 // Register a user for an event (from QR registration)
 exports.registerForEvent = async (req, res) => {
 // ... (existing code)

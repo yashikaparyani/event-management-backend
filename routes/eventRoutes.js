@@ -34,6 +34,9 @@ router.get('/:id/debate-leaderboard', authMiddleware, eventController.getDebateL
 // Debate setup for Debate events (coordinator only)
 router.put('/:id/debate-setup', authMiddleware, checkPermission('manage_events'), eventController.debateSetup);
 
+// Get participants for an event (for debate, returns registered users)
+router.get('/:id/participants', authMiddleware, eventController.getParticipants);
+
 // Future routes for events (GET, PUT, DELETE) will be added here
 
 module.exports = router; 
