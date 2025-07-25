@@ -130,27 +130,58 @@ exports.getRegisteredEvents = async (req, res) => {
 
 // Register a user for an event (from QR registration)
 exports.registerForEvent = async (req, res) => {
+// ... (existing code)
+};
+
+// Get debate leaderboard for a debate event (all roles)
+exports.getDebateLeaderboard = async (req, res) => {
     try {
         const eventId = req.params.id;
-        const { email } = req.body;
-        if (!email) {
-            return res.status(400).json({ message: 'Email is required to register for event.' });
+        const event = await Event.findById(eventId).lean();
+        if (!event || event.type !== 'Debate') {
+            return res.status(404).json({ message: 'Debate event not found.' });
         }
-        const user = await require('../models/User').findOne({ email });
-        if (!user) {
-            return res.status(404).json({ message: 'User not found.' });
+        // Defensive: aggregate leaderboard from debateResults or fallback
+        const results = Array.isArray(event.debateResults) ? event.debateResults : [];
+        // Simple aggregation: sum scores/likes per participant, group by side
+        const leaderboard = { for: [], against: [] };
+        for (const p of results) {
+            if (!p || !p.participantId) continue;
+            const side = (p.side === 'for' || p.side === 'against') ? p.side : 'for';
+            leaderboard[side].push({
+                participantId: p.participantId,
+                name: p.name || '',
+                score: typeof p.score === 'number' ? p.score : 0,
+                likes: typeof p.likes === 'number' ? p.likes : 0,
+                criteria: p.criteria || {},
+            });
         }
-        const event = await Event.findById(eventId);
-        if (!event) {
-            return res.status(404).json({ message: 'Event not found.' });
-        }
-        if (!event.registeredUsers.includes(user._id)) {
-            event.registeredUsers.push(user._id);
-            await event.save();
-        }
-        return res.status(200).json({ message: 'User registered for event successfully.' });
+        // Sort by score descending, then likes
+        leaderboard.for.sort((a, b) => b.score - a.score || b.likes - a.likes);
+        leaderboard.against.sort((a, b) => b.score - a.score || b.likes - a.likes);
+        res.status(200).json({ leaderboard });
     } catch (error) {
-        console.error('Error registering user for event:', error);
+        console.error('Error fetching debate leaderboard:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// Setup debate event (coordinator only)
+exports.debateSetup = async (req, res) => {
+    try {
+        const eventId = req.params.id;
+        const { topic, rules, timerPerParticipant } = req.body;
+        const event = await Event.findById(eventId);
+        if (!event || event.type !== 'Debate') {
+            return res.status(404).json({ message: 'Debate event not found.' });
+        }
+        if (typeof topic === 'string') event.topic = topic;
+        if (typeof rules === 'string') event.rules = rules;
+        if (typeof timerPerParticipant === 'number') event.timerPerParticipant = timerPerParticipant;
+        await event.save();
+        res.status(200).json({ message: 'Debate setup updated successfully!', event });
+    } catch (error) {
+        console.error('Error updating debate setup:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };
