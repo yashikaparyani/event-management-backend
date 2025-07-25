@@ -32,7 +32,7 @@ router.post('/:id/register', eventController.registerForEvent);
 router.get('/:id/debate-leaderboard', authMiddleware, eventController.getDebateLeaderboard);
 
 // Debate setup for Debate events (coordinator only)
-router.put('/:id/debate-setup', authMiddleware, checkPermission('coordinator'), eventController.debateSetup);
+router.put('/:id/debate-setup', authMiddleware, checkPermission('manage_events'), eventController.debateSetup);
 
 // Future routes for events (GET, PUT, DELETE) will be added here
 
