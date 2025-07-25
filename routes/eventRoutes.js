@@ -28,6 +28,12 @@ router.delete('/:id', authMiddleware, checkPermission('delete'), eventController
 // Register for an event (participant)
 router.post('/:id/register', eventController.registerForEvent);
 
+// Debate leaderboard for Debate events (all roles)
+router.get('/:id/debate-leaderboard', authMiddleware, eventController.getDebateLeaderboard);
+
+// Debate setup for Debate events (coordinator only)
+router.put('/:id/debate-setup', authMiddleware, checkPermission('coordinator'), eventController.debateSetup);
+
 // Future routes for events (GET, PUT, DELETE) will be added here
 
 module.exports = router; 

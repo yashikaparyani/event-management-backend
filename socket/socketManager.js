@@ -1,9 +1,8 @@
 const QuizSession = require('../models/QuizSession');
 const Quiz = require('../models/Quiz');
 const User = require('../models/User');
-const Debate = require('../models/Debate');
-const DebateSession = require('../models/DebateSession');
 const Team = require('../models/Team');
+const Event = require('../models/Event');
 
 class SocketManager {
     constructor(io) {
@@ -17,12 +16,11 @@ class SocketManager {
         this.io.on('connection', (socket) => {
             console.log('User connected:', socket.id);
 
-            // Join quiz session
+            // Quiz events
             socket.on('join-quiz', async (data) => {
                 await this.handleJoinQuiz(socket, data);
             });
 
-            // Submit answer
             socket.on('submit-answer', async (data) => {
                 await this.handleSubmitAnswer(socket, data);
             });
@@ -44,35 +42,14 @@ class SocketManager {
             socket.on('join-debate', async (data) => {
                 await this.handleJoinDebate(socket, data);
             });
-            socket.on('start-debate', async (data) => {
-                await this.handleStartDebate(socket, data);
+            socket.on('debate-state-request', async (data) => {
+                await this.handleDebateStateRequest(socket, data);
             });
-            socket.on('end-debate', async (data) => {
-                await this.handleEndDebate(socket, data);
-            });
-            socket.on('next-speaker', async (data) => {
-                await this.handleNextSpeaker(socket, data);
-            });
-            socket.on('assign-score', async (data) => {
-                await this.handleAssignScore(socket, data);
-            });
-            socket.on('speaker-changed', async (data) => {
-                await this.handleSpeakerChanged(socket, data);
-            });
-            socket.on('your-turn', async (data) => {
-                await this.handleYourTurn(socket, data);
-            });
-            socket.on('timer-update', async (data) => {
-                await this.handleTimerUpdate(socket, data);
-            });
-            socket.on('audience-reaction', async (data) => {
-                await this.handleAudienceReaction(socket, data);
-            });
-            socket.on('show-leaderboard-broadcast', async (data) => {
-                await this.handleShowLeaderboardBroadcast(socket, data);
+            socket.on('debate-state-update', async (data) => {
+                await this.handleDebateStateUpdate(socket, data);
             });
 
-            // Disconnect
+            // Disconnect handler
             socket.on('disconnect', () => {
                 this.handleDisconnect(socket);
             });
@@ -81,9 +58,7 @@ class SocketManager {
 
     async handleJoinQuiz(socket, data) {
         try {
-            const { quizId, userId, eventId } = data;
-            
-            // Validate user and quiz
+            const { quizId, userId } = data;
             const user = await User.findById(userId);
             const quiz = await Quiz.findById(quizId);
             
@@ -92,58 +67,52 @@ class SocketManager {
                 return;
             }
 
+            // Join socket room
+            socket.join(`quiz-${quizId}`);
+            
+            // Track participant's room
+            this.participantRooms.set(socket.id, quizId);
+            
             // Get or create quiz session
             let session = await QuizSession.findOne({ 
-                quiz: quizId, 
-                event: eventId,
+                quiz: quizId,
                 status: { $in: ['waiting', 'active'] }
             });
 
             if (!session) {
                 session = new QuizSession({
                     quiz: quizId,
-                    event: eventId,
-                    status: 'waiting'
+                    participants: [],
+                    status: 'waiting',
+                    currentQuestionIndex: -1,
+                    answers: []
                 });
                 await session.save();
             }
 
-            // Add participant to session if not already present
+            // Add participant if not already added
             if (!session.participants.includes(userId)) {
                 session.participants.push(userId);
                 await session.save();
             }
 
-            // Join socket room
-            socket.join(`quiz-${quizId}`);
-            this.participantRooms.set(socket.id, quizId);
-
-            // Store session data
-            this.activeSessions.set(quizId, {
-                sessionId: session._id,
-                currentQuestionIndex: session.currentQuestionIndex,
-                status: session.status,
-                participants: session.participants
-            });
-
-            // Send current quiz state to participant
-            socket.emit('quiz-joined', {
-                quizId: quizId,
-                status: session.status,
-                currentQuestion: session.currentQuestionIndex,
-                totalQuestions: quiz.questions.length
-            });
-
-            // If quiz is active, send current question
-            if (session.status === 'active' && session.currentQuestionIndex < quiz.questions.length) {
-                const currentQuestion = quiz.questions[session.currentQuestionIndex];
-                socket.emit('current-question', {
-                    questionIndex: session.currentQuestionIndex,
-                    question: currentQuestion.text,
-                    options: currentQuestion.options,
-                    timer: currentQuestion.timer
+            // Store active session
+            if (!this.activeSessions.has(quizId)) {
+                this.activeSessions.set(quizId, {
+                    status: session.status,
+                    currentQuestionIndex: session.currentQuestionIndex,
+                    participants: new Set(session.participants.map(id => id.toString()))
                 });
             }
+
+            // Send current quiz state
+            socket.emit('quiz-joined', {
+                quizId,
+                status: session.status,
+                currentQuestionIndex: session.currentQuestionIndex,
+                totalQuestions: quiz.questions.length,
+                participants: session.participants.length
+            });
 
         } catch (error) {
             console.error('Error joining quiz:', error);
@@ -155,15 +124,11 @@ class SocketManager {
         try {
             const { quizId, userId, questionIndex, selectedOption, timeTaken } = data;
             
-            const session = await QuizSession.findOne({ quiz: quizId });
-            if (!session) {
-                socket.emit('error', { message: 'Quiz session not found' });
-                return;
-            }
-
+            const session = await QuizSession.findOne({ quiz: quizId, status: 'active' });
             const quiz = await Quiz.findById(quizId);
-            if (!quiz || questionIndex >= quiz.questions.length) {
-                socket.emit('error', { message: 'Invalid question' });
+            
+            if (!session || !quiz) {
+                socket.emit('error', { message: 'Invalid session or quiz' });
                 return;
             }
 
@@ -173,17 +138,18 @@ class SocketManager {
             // Save answer
             session.answers.push({
                 participant: userId,
-                questionIndex: questionIndex,
-                selectedOption: selectedOption,
-                isCorrect: isCorrect,
-                timeTaken: timeTaken
+                questionIndex,
+                selectedOption,
+                isCorrect,
+                timeTaken
             });
+            
             await session.save();
 
             // Acknowledge answer submission
             socket.emit('answer-submitted', {
-                questionIndex: questionIndex,
-                isCorrect: isCorrect
+                questionIndex,
+                isCorrect
             });
 
         } catch (error) {
@@ -226,7 +192,7 @@ class SocketManager {
 
             // Emit to all participants
             this.io.to(`quiz-${quizId}`).emit('quiz-started', {
-                quizId: quizId,
+                quizId,
                 totalQuestions: quiz.questions.length
             });
 
@@ -259,80 +225,202 @@ class SocketManager {
                 return;
             }
 
-            session.currentQuestionIndex++;
+            // Move to next question
+            const nextQuestionIndex = session.currentQuestionIndex + 1;
             
-            if (session.currentQuestionIndex >= quiz.questions.length) {
+            if (nextQuestionIndex >= quiz.questions.length) {
                 // Quiz finished
                 session.status = 'finished';
                 session.endedAt = new Date();
                 await session.save();
 
-                this.io.to(`quiz-${quizId}`).emit('quiz-finished', {
-                    quizId: quizId
-                });
-            } else {
-                // Next question
-                await session.save();
-                
-                const nextQuestion = quiz.questions[session.currentQuestionIndex];
-                this.io.to(`quiz-${quizId}`).emit('current-question', {
-                    questionIndex: session.currentQuestionIndex,
-                    question: nextQuestion.text,
-                    options: nextQuestion.options,
-                    timer: nextQuestion.timer
-                });
+                this.io.to(`quiz-${quizId}`).emit('quiz-finished', { quizId });
+                return;
             }
 
-            // Update active sessions
+            // Update to next question
+            session.currentQuestionIndex = nextQuestionIndex;
+            await session.save();
+
+            // Update active session
             const activeSession = this.activeSessions.get(quizId);
             if (activeSession) {
-                activeSession.currentQuestionIndex = session.currentQuestionIndex;
-                activeSession.status = session.status;
+                activeSession.currentQuestionIndex = nextQuestionIndex;
             }
 
+            // Send next question to all participants
+            const nextQuestion = quiz.questions[nextQuestionIndex];
+            this.io.to(`quiz-${quizId}`).emit('next-question', {
+                questionIndex: nextQuestionIndex,
+                question: nextQuestion.text,
+                options: nextQuestion.options,
+                timer: nextQuestion.timer
+            });
+
         } catch (error) {
-            console.error('Error advancing question:', error);
-            socket.emit('error', { message: 'Failed to advance question' });
+            console.error('Error moving to next question:', error);
+            socket.emit('error', { message: 'Failed to move to next question' });
         }
+    }
+
+    /**
+     * Debate: Handle user joining a debate room (coordinator, participant, audience)
+     * data: { eventId, userId, role }
+     */
+    async handleJoinDebate(socket, data) {
+        try {
+            const { eventId, userId, role } = data || {};
+            if (!eventId || !userId || !role) {
+                socket.emit('debate-error', { message: 'Missing eventId, userId, or role.' });
+                return;
+            }
+            // Join debate room
+            socket.join(`debate-${eventId}`);
+            // Defensive: fetch event and send current debate state
+            const event = await Event.findById(eventId).lean();
+            if (!event || event.type !== 'Debate') {
+                socket.emit('debate-error', { message: 'Debate event not found.' });
+                return;
+            }
+            // Compose safe state object
+            const debateState = this.composeDebateState(event);
+            socket.emit('debate-state', debateState);
+        } catch (error) {
+            console.error('handleJoinDebate error:', error);
+            socket.emit('debate-error', { message: 'Failed to join debate.' });
+        }
+    }
+
+    /**
+     * Debate: Handle explicit state re-sync request (e.g., on reconnect)
+     * data: { eventId }
+     */
+    async handleDebateStateRequest(socket, data) {
+        try {
+            const { eventId } = data || {};
+            if (!eventId) {
+                socket.emit('debate-error', { message: 'Missing eventId.' });
+                return;
+            }
+            const event = await Event.findById(eventId).lean();
+            if (!event || event.type !== 'Debate') {
+                socket.emit('debate-error', { message: 'Debate event not found.' });
+                return;
+            }
+            const debateState = this.composeDebateState(event);
+            socket.emit('debate-state', debateState);
+        } catch (error) {
+            console.error('handleDebateStateRequest error:', error);
+            socket.emit('debate-error', { message: 'Failed to fetch debate state.' });
+        }
+    }
+
+    /**
+     * Debate: Handle state update from coordinator (scores, likes, turn, etc.)
+     * data: { eventId, update }
+     */
+    async handleDebateStateUpdate(socket, data) {
+        try {
+            const { eventId, update } = data || {};
+            if (!eventId || !update || typeof update !== 'object') {
+                socket.emit('debate-error', { message: 'Missing or invalid eventId/update.' });
+                return;
+            }
+            // Defensive: Only allow certain fields to be updated
+            const allowedFields = [
+                'debateResults', 'currentSpeaker', 'currentTimer', 'likes', 'spoken', 'scoreboard',
+                'showLeaderboard', 'forList', 'againstList', 'sideSelections', 'debateStatus', 'notifications'
+            ];
+            // Only keep allowed fields
+            const safeUpdate = {};
+            for (const key of allowedFields) {
+                if (update.hasOwnProperty(key)) {
+                    safeUpdate[key] = update[key];
+                }
+            }
+            // Update event doc
+            const event = await Event.findByIdAndUpdate(
+                eventId,
+                { $set: safeUpdate },
+                { new: true, lean: true }
+            );
+            if (!event) {
+                socket.emit('debate-error', { message: 'Debate event not found.' });
+                return;
+            }
+            // Broadcast new state to all in room
+            const debateState = this.composeDebateState(event);
+            this.io.to(`debate-${eventId}`).emit('debate-state', debateState);
+        } catch (error) {
+            console.error('handleDebateStateUpdate error:', error);
+            socket.emit('debate-error', { message: 'Failed to update debate state.' });
+        }
+    }
+
+    /**
+     * Compose a fully defensive debate state object for frontend
+     */
+    composeDebateState(event) {
+        // Defensive: always return all expected fields, never undefined/null
+        return {
+            eventId: event._id?.toString() || '',
+            topic: event.topic || '',
+            rules: event.rules || '',
+            timerPerParticipant: event.timerPerParticipant || 120,
+            debateResults: event.debateResults || [],
+            currentSpeaker: event.currentSpeaker || null,
+            currentTimer: typeof event.currentTimer === 'number' ? event.currentTimer : null,
+            likes: event.likes || {},
+            spoken: event.spoken || {},
+            scoreboard: event.scoreboard || {},
+            showLeaderboard: !!event.showLeaderboard,
+            forList: event.forList || [],
+            againstList: event.againstList || [],
+            sideSelections: event.sideSelections || {},
+            debateStatus: event.debateStatus || 'not_started',
+            notifications: event.notifications || [],
+        };
     }
 
     async handleShowLeaderboard(socket, data) {
         try {
             const { quizId } = data;
             
-            const session = await QuizSession.findOne({ quiz: quizId }).populate('participants', 'name');
+            const session = await QuizSession.findOne({ quiz: quizId })
+                .populate('participants', 'name')
+                .populate('answers.participant', 'name');
+            
             if (!session) {
                 socket.emit('error', { message: 'Quiz session not found' });
                 return;
             }
 
-            const scores = session.getParticipantScores();
-            const leaderboard = [];
-
-            for (const [participantId, score] of Object.entries(scores)) {
-                const participant = session.participants.find(p => p._id.toString() === participantId);
-                if (participant) {
-                    leaderboard.push({
-                        name: participant.name,
-                        correctAnswers: score.correctAnswers,
-                        totalAnswered: score.totalAnswered,
-                        totalTime: score.totalTime,
-                        accuracy: score.totalAnswered > 0 ? (score.correctAnswers / score.totalAnswered * 100).toFixed(1) : 0
-                    });
+            // Calculate scores
+            const scores = {};
+            session.answers.forEach(answer => {
+                const userId = answer.participant._id.toString();
+                if (!scores[userId]) {
+                    scores[userId] = {
+                        name: answer.participant.name,
+                        score: 0,
+                        correct: 0,
+                        total: 0
+                    };
                 }
-            }
-
-            // Sort by correct answers, then by time
-            leaderboard.sort((a, b) => {
-                if (b.correctAnswers !== a.correctAnswers) {
-                    return b.correctAnswers - a.correctAnswers;
+                scores[userId].total++;
+                if (answer.isCorrect) {
+                    scores[userId].score += 10; // 10 points per correct answer
+                    scores[userId].correct++;
                 }
-                return a.totalTime - b.totalTime;
             });
 
+            // Convert to array and sort by score (descending)
+            const leaderboard = Object.values(scores).sort((a, b) => b.score - a.score);
+
+            // Emit leaderboard to all participants
             this.io.to(`quiz-${quizId}`).emit('leaderboard', {
-                quizId: quizId,
-                leaderboard: leaderboard
+                quizId,
+                leaderboard
             });
 
         } catch (error) {
@@ -341,253 +429,23 @@ class SocketManager {
         }
     }
 
-    async handleJoinDebate(socket, data) {
-        try {
-            const { debateId, userId } = data;
-            const user = await User.findById(userId);
-            const debate = await Debate.findById(debateId);
-            if (!user || !debate) {
-                socket.emit('error', { message: 'Invalid user or debate' });
-                return;
-            }
-            // Join socket room
-            socket.join(`debate-${debateId}`);
-            // Send current debate and session state
-            const session = await DebateSession.findOne({ debate: debateId }).populate('currentSpeaker', 'name').populate({ path: 'scores.team', select: 'name' });
-            socket.emit('debate-joined', {
-                debateId,
-                debate,
-                session
-            });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to join debate' });
-        }
-    }
-
-    async handleStartDebate(socket, data) {
-        try {
-            const { debateId, userId } = data;
-            const debate = await Debate.findById(debateId);
-            const user = await User.findById(userId);
-            if (!debate || !user) {
-                socket.emit('error', { message: 'Invalid debate or user' });
-                return;
-            }
-            if (user.role.name !== 'coordinator' || user._id.toString() !== debate.coordinator.toString()) {
-                socket.emit('error', { message: 'Only coordinator can start the debate' });
-                return;
-            }
-            let session = await DebateSession.findOne({ debate: debateId, status: { $in: ['waiting', 'active'] } });
-            if (!session) {
-                session = new DebateSession({ debate: debateId, status: 'active', startedAt: new Date() });
-                await session.save();
-            } else {
-                session.status = 'active';
-                session.startedAt = new Date();
-                await session.save();
-            }
-            debate.status = 'active';
-            await debate.save();
-            // Broadcast session state
-            this.io.to(`debate-${debateId}`).emit('debate-started', { session });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to start debate' });
-        }
-    }
-
-    async handleEndDebate(socket, data) {
-        try {
-            const { debateId, userId } = data;
-            const debate = await Debate.findById(debateId);
-            const user = await User.findById(userId);
-            if (!debate || !user) {
-                socket.emit('error', { message: 'Invalid debate or user' });
-                return;
-            }
-            if (user.role.name !== 'coordinator' || user._id.toString() !== debate.coordinator.toString()) {
-                socket.emit('error', { message: 'Only coordinator can end the debate' });
-                return;
-            }
-            const session = await DebateSession.findOne({ debate: debateId, status: 'active' });
-            if (!session) {
-                socket.emit('error', { message: 'No active session' });
-                return;
-            }
-            session.status = 'finished';
-            session.endedAt = new Date();
-            await session.save();
-            debate.status = 'finished';
-            await debate.save();
-            this.io.to(`debate-${debateId}`).emit('debate-ended', { session });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to end debate' });
-        }
-    }
-
-    async handleNextSpeaker(socket, data) {
-        try {
-            const { debateId, userId, nextSpeakerId } = data;
-            const debate = await Debate.findById(debateId);
-            const user = await User.findById(userId);
-            if (!debate || !user) {
-                socket.emit('error', { message: 'Invalid debate or user' });
-                return;
-            }
-            if (user.role.name !== 'coordinator' || user._id.toString() !== debate.coordinator.toString()) {
-                socket.emit('error', { message: 'Only coordinator can change speaker' });
-                return;
-            }
-            const session = await DebateSession.findOne({ debate: debateId, status: 'active' });
-            if (!session) {
-                socket.emit('error', { message: 'No active session' });
-                return;
-            }
-            session.currentSpeaker = nextSpeakerId;
-            await session.save();
-            this.io.to(`debate-${debateId}`).emit('speaker-changed', { currentSpeaker: nextSpeakerId });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to change speaker' });
-        }
-    }
-
-    async handleSpeakerChanged(socket, data) {
-        try {
-            const { debateId, currentSpeaker, userId } = data;
-            const debate = await Debate.findById(debateId);
-            const user = await User.findById(userId);
-            if (!debate || !user) {
-                socket.emit('error', { message: 'Invalid debate or user' });
-                return;
-            }
-            if (user.role.name !== 'coordinator') {
-                socket.emit('error', { message: 'Only coordinator can change speaker' });
-                return;
-            }
-            // Broadcast to all participants and audience
-            this.io.to(`debate-${debateId}`).emit('speaker-changed', { currentSpeaker });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to change speaker' });
-        }
-    }
-
-    async handleYourTurn(socket, data) {
-        try {
-            const { debateId, participantId, userId } = data;
-            const debate = await Debate.findById(debateId);
-            const user = await User.findById(userId);
-            if (!debate || !user) {
-                socket.emit('error', { message: 'Invalid debate or user' });
-                return;
-            }
-            if (user.role.name !== 'coordinator') {
-                socket.emit('error', { message: 'Only coordinator can notify turns' });
-                return;
-            }
-            // Send notification to specific participant
-            this.io.to(`debate-${debateId}`).emit('your-turn', { participantId });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to send turn notification' });
-        }
-    }
-
-    async handleTimerUpdate(socket, data) {
-        try {
-            const { debateId, timeLeft, userId } = data;
-            const debate = await Debate.findById(debateId);
-            const user = await User.findById(userId);
-            if (!debate || !user) {
-                socket.emit('error', { message: 'Invalid debate or user' });
-                return;
-            }
-            if (user.role.name !== 'coordinator') {
-                socket.emit('error', { message: 'Only coordinator can update timer' });
-                return;
-            }
-            // Broadcast timer update to all participants and audience
-            this.io.to(`debate-${debateId}`).emit('timer-updated', { timeLeft });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to update timer' });
-        }
-    }
-
-    async handleAudienceReaction(socket, data) {
-        try {
-            const { debateId, speakerId, reaction, userId } = data;
-            const debate = await Debate.findById(debateId);
-            const user = await User.findById(userId);
-            if (!debate || !user) {
-                socket.emit('error', { message: 'Invalid debate or user' });
-                return;
-            }
-            if (user.role.name !== 'audience') {
-                socket.emit('error', { message: 'Only audience can react' });
-                return;
-            }
-            // Send reaction to coordinator for tracking
-            this.io.to(`debate-${debateId}`).emit('audience-reaction', { speakerId, reaction, userId });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to process reaction' });
-        }
-    }
-
-    async handleShowLeaderboardBroadcast(socket, data) {
-        try {
-            const { debateId, userId } = data;
-            const debate = await Debate.findById(debateId);
-            const user = await User.findById(userId);
-            if (!debate || !user) {
-                socket.emit('error', { message: 'Invalid debate or user' });
-                return;
-            }
-            if (user.role.name !== 'coordinator') {
-                socket.emit('error', { message: 'Only coordinator can show leaderboard' });
-                return;
-            }
-            // Broadcast leaderboard show to all participants and audience
-            this.io.to(`debate-${debateId}`).emit('show-leaderboard', { debateId });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to show leaderboard' });
-        }
-    }
-
-    async handleAssignScore(socket, data) {
-        try {
-            const { debateId, userId, teamId, points } = data;
-            const debate = await Debate.findById(debateId);
-            const user = await User.findById(userId);
-            if (!debate || !user) {
-                socket.emit('error', { message: 'Invalid debate or user' });
-                return;
-            }
-            if (user.role.name !== 'coordinator' || user._id.toString() !== debate.coordinator.toString()) {
-                socket.emit('error', { message: 'Only coordinator can assign score' });
-                return;
-            }
-            const session = await DebateSession.findOne({ debate: debateId, status: 'active' });
-            if (!session) {
-                socket.emit('error', { message: 'No active session' });
-                return;
-            }
-            let score = session.scores.find(s => s.team.toString() === teamId);
-            if (!score) {
-                session.scores.push({ team: teamId, points });
-            } else {
-                score.points += points;
-            }
-            await session.save();
-            this.io.to(`debate-${debateId}`).emit('score-updated', { scores: session.scores });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to assign score' });
-        }
-    }
-
     handleDisconnect(socket) {
+        console.log('User disconnected:', socket.id);
+        
+        // Remove from participant rooms
         const quizId = this.participantRooms.get(socket.id);
         if (quizId) {
             this.participantRooms.delete(socket.id);
+            
+            // Update active sessions count if needed
+            const activeSession = this.activeSessions.get(quizId);
+            if (activeSession) {
+                // In a real app, you might want to track individual participants
+                // and update the count more precisely
+                console.log(`Participant left quiz ${quizId}`);
+            }
         }
-        console.log('User disconnected:', socket.id);
     }
 }
 
-module.exports = SocketManager; 
+module.exports = SocketManager;

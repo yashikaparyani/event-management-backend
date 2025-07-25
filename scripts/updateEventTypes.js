@@ -4,10 +4,11 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const Event = require('../models/Event');
 
-// 1. Update these mappings as needed for your events
+// Event type mappings
 const typeMappings = [
     { filter: { title: /quiz/i }, type: 'Quiz' },
-    { filter: { title: /debate/i }, type: 'Debate' }
+    { filter: { title: /poetry/i }, type: 'Poetry' },
+    { filter: { title: /codecraze/i }, type: 'CodecRaze' }
 ];
 
 async function updateEventTypes() {

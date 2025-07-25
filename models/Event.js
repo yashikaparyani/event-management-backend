@@ -78,6 +78,20 @@ const eventSchema = new mongoose.Schema({
     qrCode: {
         type: String,
         trim: true
+    },
+    // Debate-specific fields
+    topic: {
+        type: String,
+        trim: true
+    },
+    rules: {
+        type: String,
+        trim: true
+    },
+    timerPerParticipant: {
+        type: Number,
+        min: 30,
+        max: 600
     }
 });
 
