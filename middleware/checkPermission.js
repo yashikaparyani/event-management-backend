@@ -37,8 +37,18 @@ const checkPermission = (requiredAction) => {
           return res.status(403).json({ message: 'Only admin can perform this action.' });
         default:
           // Fallback: check custom/role permissions for extensibility
-          const hasPermission = user.customPermissions?.some(p => p.name === requiredAction) ||
-            user.role.permissions?.some(p => p.name === requiredAction);
+          let hasPermission = false;
+          if (user.customPermissions && Array.isArray(user.customPermissions)) {
+            hasPermission = user.customPermissions.some(p => p.name === requiredAction);
+          }
+          if (!hasPermission && user.role.permissions && Array.isArray(user.role.permissions)) {
+            // If permissions are objects with a name property
+            hasPermission = user.role.permissions.some(p => p.name === requiredAction);
+            // If permissions are ObjectIDs but user is coordinator and requiredAction is 'coordinator', allow
+            if (!hasPermission && typeof user.role.permissions[0] === 'string' && requiredAction === 'coordinator' && roleName === 'coordinator') {
+              hasPermission = true;
+            }
+          }
           if (!hasPermission) {
             return res.status(403).json({ message: 'Permission denied.' });
           }
