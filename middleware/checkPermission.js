@@ -50,6 +50,13 @@ const checkPermission = (requiredAction) => {
             }
           }
           if (!hasPermission) {
+            console.error('[PERMISSION DENIED]', {
+              userId: user.id || user._id,
+              roleName,
+              permissions: user.role.permissions,
+              requiredAction,
+              customPermissions: user.customPermissions
+            });
             return res.status(403).json({ message: 'Permission denied.' });
           }
           return next();
