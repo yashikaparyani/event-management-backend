@@ -159,26 +159,105 @@ exports.registerAudience = async (req, res) => {
 exports.startSession = async (req, res) => {
   try {
     const { debateId } = req.params;
-    const debate = await Debate.findById(debateId);
-    if (!debate) return res.status(404).json({ message: 'Debate not found' });
-    // Only coordinator can start
-    if (req.user.role.name !== 'coordinator' || req.user._id.toString() !== debate.coordinator.toString()) {
-      return res.status(403).json({ message: 'Only coordinator can start the debate' });
+    const { motion, rules, timerPerParticipant } = req.body;
+    
+    // Validate input
+    if (!motion || !rules) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Motion and rules are required' 
+      });
     }
-    let session = await DebateSession.findOne({ debate: debateId, status: { $in: ['waiting', 'active'] } });
-    if (!session) {
-      session = new DebateSession({ debate: debateId, status: 'active', startedAt: new Date() });
-      await session.save();
-    } else {
-      session.status = 'active';
-      session.startedAt = new Date();
-      await session.save();
+
+    // Find the debate
+    const debate = await Debate.findById(debateId)
+      .populate('teams')
+      .populate('participants', 'name email');
+    
+    if (!debate) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Debate not found' 
+      });
     }
-    debate.status = 'active';
+
+    // Check if there's an active session
+    const activeSession = await DebateSession.findOne({
+      debate: debateId,
+      status: 'active'
+    });
+
+    if (activeSession) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'A session is already active for this debate' 
+      });
+    }
+
+    // Get all participants
+    const participants = [];
+    for (const team of debate.teams) {
+      const teamWithMembers = await Team.findById(team._id).populate('members');
+      participants.push(...teamWithMembers.members);
+    }
+
+    // Create new session with initial data
+    const session = new DebateSession({
+      debate: debateId,
+      status: 'active',
+      motion: motion,
+      rules: rules,
+      timerPerParticipant: timerPerParticipant || 120, // Default 2 minutes
+      currentSpeaker: null,
+      startTime: new Date(),
+      speakingOrder: [],
+      scores: []
+    });
+
+    await session.save();
+
+    // Update debate with session reference
+    debate.currentSession = session._id;
+    debate.status = 'in_progress';
     await debate.save();
-    res.status(200).json({ message: 'Debate session started', session });
+
+    // Emit event to all connected clients
+    if (req.io) {
+      req.io.to(`debate_${debateId}`).emit('debate-started', {
+        success: true,
+        eventId: debate.event,
+        debateId: debate._id,
+        sessionId: session._id,
+        motion: session.motion,
+        rules: session.rules,
+        startTime: session.startTime,
+        participants: participants.map(p => ({
+          id: p._id,
+          name: p.name,
+          email: p.email
+        }))
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Debate session started successfully',
+      session: {
+        id: session._id,
+        motion: session.motion,
+        rules: session.rules,
+        startTime: session.startTime,
+        timerPerParticipant: session.timerPerParticipant
+      }
+    });
+
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Error starting debate session:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to start debate session',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 

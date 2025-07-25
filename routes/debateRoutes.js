@@ -10,6 +10,9 @@ router.post('/', authMiddleware, checkPermission('create_event'), debateControll
 // Get debate details
 router.get('/:id', authMiddleware, checkPermission('view'), debateController.getDebate);
 
+// Get debate by event ID
+router.get('/event/:eventId', authMiddleware, checkPermission('view'), debateController.getDebateByEvent);
+
 // Register a team (participant)
 router.post('/:debateId/teams', authMiddleware, checkPermission('register'), debateController.registerTeam);
 
@@ -33,5 +36,20 @@ router.post('/:debateId/session/score', authMiddleware, checkPermission('edit_ev
 
 // Get current session state
 router.get('/:debateId/session', authMiddleware, checkPermission('view'), debateController.getSession);
+
+// Get debate session by event ID
+router.get('/event/:eventId/session', authMiddleware, checkPermission('view'), debateController.getSessionByEvent);
+
+// Participant flow - Get debate details for participant
+router.get('/participant/:eventId', authMiddleware, checkPermission('participate'), debateController.getParticipantDebate);
+
+// Audience flow - Get debate details for audience
+router.get('/audience/:eventId', authMiddleware, checkPermission('view'), debateController.getAudienceDebate);
+
+// Get leaderboard for a debate
+router.get('/:debateId/leaderboard', authMiddleware, checkPermission('view'), debateController.getLeaderboard);
+
+// Update debate status
+router.patch('/:debateId/status', authMiddleware, checkPermission('edit_event'), debateController.updateDebateStatus);
 
 module.exports = router; 
