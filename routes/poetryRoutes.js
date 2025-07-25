@@ -5,11 +5,14 @@ const path = require('path');
 const poetryController = require('../controllers/poetryController');
 const authMiddleware = require('../middleware/authMiddleware');
 const checkPermission = require('../middleware/checkPermission');
+const fs = require('fs');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         const uploadDir = path.join(__dirname, '../uploads', file.fieldname);
+        // Ensure the directory exists
+        fs.mkdirSync(uploadDir, { recursive: true });
         cb(null, uploadDir);
     },
     filename: function (req, file, cb) {
@@ -41,13 +44,13 @@ router.get('/:id/topics',
 
 router.post('/:id/topics', 
     authMiddleware, 
-    checkPermission('coordinator'),
+    checkPermission('manage_events'),
     poetryController.addTopic
 );
 
 router.delete('/:id/topics/:topicId', 
     authMiddleware, 
-    checkPermission('coordinator'),
+    checkPermission('manage_events'),
     poetryController.deleteTopic
 );
 
