@@ -42,207 +42,34 @@ class SocketManager {
 
             // Debate events
             socket.on('join-debate', async (data) => {
-                try {
-                    const { eventId, userId } = data;
-                    if (!eventId || !userId) {
-                        throw new Error('Missing required fields');
-                    }
-                    
-                    // Join the debate room
-                    const roomName = `debate_${eventId}`;
-                    await socket.join(roomName);
-                    
-                    console.log(`User ${userId} joined debate room ${eventId}`);
-                    
-                    // Send current state if available
-                    const debate = await Debate.findOne({ event: eventId })
-                        .populate('currentSession')
-                        .populate('teams');
-                        
-                    if (debate && debate.currentSession) {
-                        socket.emit('debate-state-update', {
-                            status: 'active',
-                            motion: debate.currentSession.motion,
-                            rules: debate.currentSession.rules,
-                            currentSpeaker: debate.currentSession.currentSpeaker,
-                            timer: debate.currentSession.timerPerParticipant
-                        });
-                    }
-                    
-                } catch (error) {
-                    console.error('Error joining debate:', error);
-                    socket.emit('error', { message: error.message });
-                }
+                await this.handleJoinDebate(socket, data);
             });
-            
             socket.on('start-debate', async (data) => {
                 await this.handleStartDebate(socket, data);
             });
-            
             socket.on('end-debate', async (data) => {
-                try {
-                    const { eventId, userId } = data;
-                    if (!eventId || !userId) {
-                        throw new Error('Missing required fields');
-                    }
-                    
-                    // Verify user is coordinator
-                    const debate = await Debate.findOne({ event: eventId });
-                    if (!debate) {
-                        throw new Error('Debate not found');
-                    }
-                    
-                    if (debate.coordinator.toString() !== userId) {
-                        throw new Error('Only the coordinator can end the debate');
-                    }
-                    
-                    // Update debate status
-                    debate.status = 'completed';
-                    await debate.save();
-                    
-                    // Notify all participants
-                    this.io.to(`debate_${eventId}`).emit('debate-ended', {
-                        success: true,
-                        message: 'The debate has ended',
-                        endedAt: new Date()
-                    });
-                    
-                } catch (error) {
-                    console.error('Error ending debate:', error);
-                    socket.emit('error', { message: error.message });
-                }
+                await this.handleEndDebate(socket, data);
             });
-            
             socket.on('next-speaker', async (data) => {
-                try {
-                    const { eventId, userId, nextSpeakerId } = data;
-                    if (!eventId || !userId || !nextSpeakerId) {
-                        throw new Error('Missing required fields');
-                    }
-                    
-                    // Verify user is coordinator
-                    const debate = await Debate.findOne({ event: eventId });
-                    if (!debate || debate.coordinator.toString() !== userId) {
-                        throw new Error('Only the coordinator can change speakers');
-                    }
-                    
-                    // Update current speaker in session
-                    const session = await DebateSession.findOneAndUpdate(
-                        { debate: debate._id, status: 'active' },
-                        { $set: { currentSpeaker: nextSpeakerId } },
-                        { new: true }
-                    );
-                    
-                    if (!session) {
-                        throw new Error('No active session found');
-                    }
-                    
-                    // Notify all participants
-                    this.io.to(`debate_${eventId}`).emit('speaker-changed', {
-                        speakerId: nextSpeakerId,
-                        timeAllocated: session.timerPerParticipant || 120
-                    });
-                    
-                    // Notify the next speaker directly
-                    this.io.to(`user_${nextSpeakerId}`).emit('your-turn', {
-                        timeLeft: session.timerPerParticipant || 120,
-                        message: 'It\'s your turn to speak!'
-                    });
-                    
-                } catch (error) {
-                    console.error('Error changing speaker:', error);
-                    socket.emit('error', { message: error.message });
-                }
+                await this.handleNextSpeaker(socket, data);
             });
-            
+            socket.on('assign-score', async (data) => {
+                await this.handleAssignScore(socket, data);
+            });
+            socket.on('speaker-changed', async (data) => {
+                await this.handleSpeakerChanged(socket, data);
+            });
+            socket.on('your-turn', async (data) => {
+                await this.handleYourTurn(socket, data);
+            });
             socket.on('timer-update', async (data) => {
-                try {
-                    const { eventId, timeLeft } = data;
-                    if (!eventId || timeLeft === undefined) {
-                        throw new Error('Missing required fields');
-                    }
-                    
-                    // Broadcast timer update to all participants
-                    this.io.to(`debate_${eventId}`).emit('timer-updated', {
-                        timeLeft: parseInt(timeLeft),
-                        updatedAt: new Date()
-                    });
-                    
-                } catch (error) {
-                    console.error('Error updating timer:', error);
-                    socket.emit('error', { message: error.message });
-                }
+                await this.handleTimerUpdate(socket, data);
             });
-            
             socket.on('audience-reaction', async (data) => {
-                try {
-                    const { eventId, userId, reaction } = data;
-                    if (!eventId || !userId || !reaction) {
-                        throw new Error('Missing required fields');
-                    }
-                    
-                    // Get current speaker
-                    const debate = await Debate.findOne({ event: eventId })
-                        .populate('currentSession');
-                        
-                    if (!debate || !debate.currentSession) {
-                        throw new Error('No active debate session');
-                    }
-                    
-                    // Update reaction count
-                    const updateField = reaction === 'like' ? 
-                        'reactions.likes' : 'reactions.dislikes';
-                        
-                    await DebateSession.findByIdAndUpdate(
-                        debate.currentSession._id,
-                        { $addToSet: { [updateField]: userId } }
-                    );
-                    
-                    // Broadcast updated reactions
-                    const updatedSession = await DebateSession.findById(debate.currentSession._id);
-                    this.io.to(`debate_${eventId}`).emit('reactions-updated', {
-                        likes: updatedSession.reactions?.likes?.length || 0,
-                        dislikes: updatedSession.reactions?.dislikes?.length || 0
-                    });
-                    
-                } catch (error) {
-                    console.error('Error processing reaction:', error);
-                    socket.emit('error', { message: error.message });
-                }
+                await this.handleAudienceReaction(socket, data);
             });
-            
-            socket.on('show-leaderboard', async (data) => {
-                try {
-                    const { eventId, userId } = data;
-                    if (!eventId || !userId) {
-                        throw new Error('Missing required fields');
-                    }
-                    
-                    // Verify user is coordinator
-                    const debate = await Debate.findOne({ event: eventId });
-                    if (!debate || debate.coordinator.toString() !== userId) {
-                        throw new Error('Only the coordinator can show the leaderboard');
-                    }
-                    
-                    // Get scores
-                    const session = await DebateSession.findOne({ debate: debate._id })
-                        .populate('scores.team', 'name')
-                        .sort({ 'scores.total': -1 });
-                    
-                    if (!session) {
-                        throw new Error('No session data found');
-                    }
-                    
-                    // Broadcast leaderboard to all participants
-                    this.io.to(`debate_${eventId}`).emit('leaderboard-updated', {
-                        scores: session.scores,
-                        updatedAt: new Date()
-                    });
-                    
-                } catch (error) {
-                    console.error('Error showing leaderboard:', error);
-                    socket.emit('error', { message: error.message });
-                }
+            socket.on('show-leaderboard-broadcast', async (data) => {
+                await this.handleShowLeaderboardBroadcast(socket, data);
             });
 
             // Disconnect

@@ -42,159 +42,6 @@ exports.getDebate = async (req, res) => {
   }
 };
 
-// Get debate by event ID
-exports.getDebateByEvent = async (req, res) => {
-  try {
-    const debate = await Debate.findOne({ event: req.params.eventId })
-      .populate('event')
-      .populate('coordinator', 'name email')
-      .populate({ path: 'teams', populate: { path: 'members', select: 'name email' } })
-      .populate('audience', 'name email');
-      
-    if (!debate) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'No debate found for this event' 
-      });
-    }
-    
-    res.status(200).json({
-      success: true,
-      data: debate
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      success: false,
-      message: 'Server error',
-      error: error.message 
-    });
-  }
-};
-
-// Get session by event ID
-exports.getSessionByEvent = async (req, res) => {
-  try {
-    const debate = await Debate.findOne({ event: req.params.eventId });
-    
-    if (!debate) {
-      return res.status(404).json({
-        success: false,
-        message: 'No debate found for this event'
-      });
-    }
-    
-    const session = await DebateSession.findOne({ 
-      debate: debate._id,
-      status: 'active'
-    }).populate('currentSpeaker', 'name email');
-    
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        message: 'No active session found for this debate'
-      });
-    }
-    
-    res.status(200).json({
-      success: true,
-      data: session
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
-  }
-};
-
-// Get leaderboard for a debate
-exports.getLeaderboard = async (req, res) => {
-  try {
-    const { debateId } = req.params;
-    
-    const session = await DebateSession.findOne({ debate: debateId })
-      .populate({
-        path: 'scores.team',
-        select: 'name side',
-        populate: {
-          path: 'members',
-          select: 'name email'
-        }
-      })
-      .sort({ 'scores.total': -1 });
-      
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        message: 'No session found for this debate'
-      });
-    }
-    
-    res.status(200).json({
-      success: true,
-      data: {
-        scores: session.scores,
-        updatedAt: session.updatedAt
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
-  }
-};
-
-// Update debate status
-exports.updateDebateStatus = async (req, res) => {
-  try {
-    const { status } = req.body;
-    const { debateId } = req.params;
-    
-    if (!['upcoming', 'in_progress', 'completed', 'cancelled'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid status. Must be one of: upcoming, in_progress, completed, cancelled'
-      });
-    }
-    
-    const debate = await Debate.findByIdAndUpdate(
-      debateId,
-      { status },
-      { new: true, runValidators: true }
-    );
-    
-    if (!debate) {
-      return res.status(404).json({
-        success: false,
-        message: 'Debate not found'
-      });
-    }
-    
-    // Emit status update event
-    if (req.io) {
-      req.io.to(`debate_${debateId}`).emit('debate-status-updated', {
-        status,
-        updatedAt: new Date()
-      });
-    }
-    
-    res.status(200).json({
-      success: true,
-      message: 'Debate status updated successfully',
-      data: debate
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
-  }
-};
-
 // Register participant for debate
 exports.registerParticipant = async (req, res) => {
   try {
@@ -312,105 +159,26 @@ exports.registerAudience = async (req, res) => {
 exports.startSession = async (req, res) => {
   try {
     const { debateId } = req.params;
-    const { motion, rules, timerPerParticipant } = req.body;
-    
-    // Validate input
-    if (!motion || !rules) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Motion and rules are required' 
-      });
+    const debate = await Debate.findById(debateId);
+    if (!debate) return res.status(404).json({ message: 'Debate not found' });
+    // Only coordinator can start
+    if (req.user.role.name !== 'coordinator' || req.user._id.toString() !== debate.coordinator.toString()) {
+      return res.status(403).json({ message: 'Only coordinator can start the debate' });
     }
-
-    // Find the debate
-    const debate = await Debate.findById(debateId)
-      .populate('teams')
-      .populate('participants', 'name email');
-    
-    if (!debate) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Debate not found' 
-      });
+    let session = await DebateSession.findOne({ debate: debateId, status: { $in: ['waiting', 'active'] } });
+    if (!session) {
+      session = new DebateSession({ debate: debateId, status: 'active', startedAt: new Date() });
+      await session.save();
+    } else {
+      session.status = 'active';
+      session.startedAt = new Date();
+      await session.save();
     }
-
-    // Check if there's an active session
-    const activeSession = await DebateSession.findOne({
-      debate: debateId,
-      status: 'active'
-    });
-
-    if (activeSession) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'A session is already active for this debate' 
-      });
-    }
-
-    // Get all participants
-    const participants = [];
-    for (const team of debate.teams) {
-      const teamWithMembers = await Team.findById(team._id).populate('members');
-      participants.push(...teamWithMembers.members);
-    }
-
-    // Create new session with initial data
-    const session = new DebateSession({
-      debate: debateId,
-      status: 'active',
-      motion: motion,
-      rules: rules,
-      timerPerParticipant: timerPerParticipant || 120, // Default 2 minutes
-      currentSpeaker: null,
-      startTime: new Date(),
-      speakingOrder: [],
-      scores: []
-    });
-
-    await session.save();
-
-    // Update debate with session reference
-    debate.currentSession = session._id;
-    debate.status = 'in_progress';
+    debate.status = 'active';
     await debate.save();
-
-    // Emit event to all connected clients
-    if (req.io) {
-      req.io.to(`debate_${debateId}`).emit('debate-started', {
-        success: true,
-        eventId: debate.event,
-        debateId: debate._id,
-        sessionId: session._id,
-        motion: session.motion,
-        rules: session.rules,
-        startTime: session.startTime,
-        participants: participants.map(p => ({
-          id: p._id,
-          name: p.name,
-          email: p.email
-        }))
-      });
-    }
-
-    res.status(201).json({
-      success: true,
-      message: 'Debate session started successfully',
-      session: {
-        id: session._id,
-        motion: session.motion,
-        rules: session.rules,
-        startTime: session.startTime,
-        timerPerParticipant: session.timerPerParticipant
-      }
-    });
-
+    res.status(200).json({ message: 'Debate session started', session });
   } catch (error) {
-    console.error('Error starting debate session:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Failed to start debate session',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
