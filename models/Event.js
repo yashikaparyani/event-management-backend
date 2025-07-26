@@ -92,7 +92,10 @@ const eventSchema = new mongoose.Schema({
         type: Number,
         min: 30,
         max: 600
-    }
+    },
+ isActive: { type: Boolean, default: false },
+submissionsLocked: { type: Boolean, default: false },
+leaderboardVisible: { type: Boolean, default: false }
 });
 
 // Update the updatedAt timestamp before saving
@@ -100,5 +103,7 @@ eventSchema.pre('save', function(next) {
     this.updatedAt = Date.now();
     next();
 });
+
+
 
 module.exports = mongoose.model('Event', eventSchema);
