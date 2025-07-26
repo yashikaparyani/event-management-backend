@@ -57,7 +57,7 @@ router.delete('/:id/topics/:topicId',
 // Submission routes
 router.get('/:id/submissions', 
     authMiddleware, 
-    checkPermission('coordinator'),
+    checkPermission('manage_events'),
     poetryController.getEventSubmissions
 );
 
