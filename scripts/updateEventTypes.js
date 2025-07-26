@@ -8,7 +8,6 @@ const Event = require('../models/Event');
 const typeMappings = [
     { filter: { title: /quiz/i }, type: 'Quiz' },
     { filter: { title: /poetry/i }, type: 'Poetry' },
-    { filter: { title: /codecraze/i }, type: 'CodecRaze' }
 ];
 
 async function updateEventTypes() {
