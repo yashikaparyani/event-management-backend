@@ -22,6 +22,16 @@ exports.getProblemsByEvent = async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 };
+// Get a single coding problem by its ID
+exports.getProblemById = async (req, res) => {
+  try {
+    const problem = await CodingProblem.findById(req.params.problemId);
+    if (!problem) return res.status(404).json({ error: 'Problem not found' });
+    res.json(problem);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
 
 // Submit code for a problem (Participant)
 exports.submitCode = async (req, res) => {
