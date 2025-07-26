@@ -30,6 +30,33 @@ exports.createEvent = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+// In server/controllers/eventController.js
+exports.registerForEvent = async (req, res) => {
+    try {
+        const event = await Event.findById(req.params.id);
+        if (!event) {
+            return res.status(404).json({ message: 'Event not found' });
+        }
+
+        // Check if already registered
+        if (event.registeredParticipants.includes(req.user.id)) {
+            return res.status(400).json({ message: 'Already registered' });
+        }
+
+        // Register the user
+        event.registeredParticipants.push(req.user.id);
+        await event.save();
+
+        res.status(200).json({ 
+            message: 'Registered successfully',
+            eventId: event._id
+        });
+
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
 
 // Get all events
 exports.getEvents = async (req, res) => {
@@ -155,10 +182,8 @@ exports.getParticipants = async (req, res) => {
     }
 };
 
-// Register a user for an event (from QR registration)
-exports.registerForEvent = async (req, res) => {
-// ... (existing code)
-};
+
+
 
 // Get debate leaderboard for a debate event (all roles)
 exports.getDebateLeaderboard = async (req, res) => {

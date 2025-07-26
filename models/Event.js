@@ -47,7 +47,7 @@ const eventSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['Quiz', 'Debate', 'Poetry', 'CodecRaze'],
+        enum: ['Quiz', 'Debate', 'Poetry', 'codecRaze'],
         required: true
     },
     assignedCoordinators: [{
