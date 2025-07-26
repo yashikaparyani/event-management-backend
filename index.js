@@ -4,6 +4,8 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+
+
 const bodyParser = require('body-parser');
 const initializeRolesAndPermissions = require('./config/initializeRolesAndPermissions');
 const path = require('path');
@@ -13,31 +15,32 @@ const SocketManager = require('./socket/socketManager');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
-    cors: {
-        origin: ["http://localhost:3000", "http://127.0.0.1:5500", "https://evnify.netlify.app"],
-        methods: ["GET", "POST"]
-    }
-});
 
-// Initialize socket manager
-const socketManager = new SocketManager(io);
 
-// Updated CORS setup for dynamic origin and preflight support
+// CORS Configuration
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5000',
   'http://127.0.0.1:5500',
   'http://127.0.0.1:5503',
   'http://127.0.0.1:5504',
-  'https://evnify.netlify.app',
-  'https://your-custom-domain.com'
+  'https://evnify.netlify.app'
 ];
 
+// Socket.IO CORS
+const io = socketIo(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true
+  }
+});
+
+// CORS Middleware
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('netlify.app')) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -45,8 +48,10 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token']
 }));
+
+
 
 // Handle preflight requests for all routes
 app.options('*', cors());
