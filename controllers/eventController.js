@@ -30,7 +30,7 @@ exports.createEvent = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
-// In server/controllers/eventController.js
+// Register a participant for an event
 exports.registerForEvent = async (req, res) => {
     try {
         const event = await Event.findById(req.params.id);
@@ -38,23 +38,37 @@ exports.registerForEvent = async (req, res) => {
             return res.status(404).json({ message: 'Event not found' });
         }
 
+        // Get user ID from JWT token or request body
+        const userId = req.user?.id || req.body.userId;
+        if (!userId) {
+            return res.status(400).json({ message: 'User ID is required' });
+        }
+
+        // Convert to string for consistent comparison
+        const userIdStr = userId.toString();
+
         // Check if already registered
-        if (event.registeredParticipants.includes(req.user.id)) {
-            return res.status(400).json({ message: 'Already registered' });
+        if (event.registeredParticipants.some(id => id.toString() === userIdStr)) {
+            return res.status(400).json({ message: 'Already registered for this event' });
         }
 
         // Register the user
-        event.registeredParticipants.push(req.user.id);
+        event.registeredParticipants.push(userId);
         await event.save();
 
         res.status(200).json({ 
+            success: true,
             message: 'Registered successfully',
             eventId: event._id
         });
 
     } catch (error) {
         console.error('Registration error:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ 
+            success: false,
+            message: 'Server error during registration',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 };
 
