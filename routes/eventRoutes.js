@@ -26,7 +26,7 @@ router.put('/:id', authMiddleware, checkPermission('edit_event'), eventControlle
 router.delete('/:id', authMiddleware, checkPermission('delete'), eventController.deleteEvent);
 
 // Register for an event (participant)
-router.post('/:id/register', eventController.registerForEvent);
+router.post('/:id/register', authMiddleware, eventController.registerForEvent);
 
 // Debate leaderboard for Debate events (all roles)
 router.get('/:id/debate-leaderboard', authMiddleware, eventController.getDebateLeaderboard);
