@@ -48,7 +48,14 @@ const eventSchema = new mongoose.Schema({
     type: {
         type: String,
         enum: ['Quiz', 'Debate', 'Poetry', 'codecRaze'],
-        required: true
+        required: true,
+        set: function(value) {
+            // Normalize to 'codecRaze' for any case variation
+            if (value && value.toLowerCase() === 'codecraze' || value === 'CodecRaze') {
+                return 'codecRaze';
+            }
+            return value;
+        }
     },
     assignedCoordinators: [{
         type: mongoose.Schema.Types.ObjectId,

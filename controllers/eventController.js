@@ -33,41 +33,95 @@ exports.createEvent = async (req, res) => {
 // Register a participant for an event
 exports.registerForEvent = async (req, res) => {
     try {
+        console.log('Registration request received:', {
+            params: req.params,
+            body: req.body,
+            user: req.user
+        });
+
         const event = await Event.findById(req.params.id);
         if (!event) {
-            return res.status(404).json({ message: 'Event not found' });
+            console.log('Event not found:', req.params.id);
+            return res.status(404).json({ 
+                success: false,
+                message: 'Event not found' 
+            });
         }
 
         // Get user ID from JWT token or request body
         const userId = req.user?.id || req.body.userId;
         if (!userId) {
-            return res.status(400).json({ message: 'User ID is required' });
+            console.log('Missing user ID in request');
+            return res.status(400).json({ 
+                success: false,
+                message: 'User ID is required' 
+            });
         }
 
         // Convert to string for consistent comparison
         const userIdStr = userId.toString();
+        console.log('Processing registration for user:', userIdStr, 'to event:', event._id);
 
         // Check if already registered
-        if (event.registeredParticipants.some(id => id.toString() === userIdStr)) {
-            return res.status(400).json({ message: 'Already registered for this event' });
+        const isRegistered = event.registeredParticipants.some(id => 
+            id && id.toString() === userIdStr
+        );
+        
+        if (isRegistered) {
+            console.log('User already registered:', userIdStr);
+            return res.status(400).json({ 
+                success: false,
+                message: 'Already registered for this event' 
+            });
         }
 
         // Register the user
+        console.log('Adding user to registered participants:', userIdStr);
         event.registeredParticipants.push(userId);
-        await event.save();
-
-        res.status(200).json({ 
-            success: true,
-            message: 'Registered successfully',
-            eventId: event._id
-        });
+        
+        try {
+            await event.save();
+            console.log('Registration successful for user:', userIdStr);
+            
+            res.status(200).json({ 
+                success: true,
+                message: 'Registered successfully',
+                eventId: event._id,
+                eventType: event.type
+            });
+        } catch (saveError) {
+            console.error('Error saving event:', saveError);
+            throw saveError;
+        }
 
     } catch (error) {
-        console.error('Registration error:', error);
+        console.error('Registration error:', {
+            message: error.message,
+            stack: error.stack,
+            name: error.name,
+            code: error.code,
+            keyPattern: error.keyPattern,
+            keyValue: error.keyValue
+        });
+        
+        let errorMessage = 'Server error during registration';
+        
+        // Handle specific MongoDB errors
+        if (error.name === 'ValidationError') {
+            errorMessage = 'Validation error: ' + Object.values(error.errors)
+                .map(e => e.message)
+                .join(', ');
+        } else if (error.name === 'CastError') {
+            errorMessage = 'Invalid data format';
+        } else if (error.code === 11000) {
+            errorMessage = 'Duplicate key error';
+        }
+        
         res.status(500).json({ 
             success: false,
-            message: 'Server error during registration',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: errorMessage,
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+            ...(process.env.NODE_ENV === 'development' ? { stack: error.stack } : {})
         });
     }
 };
